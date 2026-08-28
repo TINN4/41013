@@ -1,0 +1,147 @@
+<?php
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/store.php';
+ssms_require_staff(); // secretary/admin only — council members get redirected to Attendance
+
+$flash = '';
+$formError = '';
+
+// --- Change my own password --------------------------------------------
+if (isset($_POST['action']) && $_POST['action'] === 'change_password') {
+    $current = $_POST['current_password'] ?? '';
+    $new = $_POST['new_password'] ?? '';
+    $confirm = $_POST['confirm_password'] ?? '';
+
+    $staffUsers = ssms_read('staff_users');
+    $me = null;
+    foreach ($staffUsers as $u) {
+        if ($u['username'] === $_SESSION['ssms_user']) { $me = $u; break; }
+    }
+
+    if (!$me || !password_verify($current, $me['password_hash'])) {
+        $formError = 'Your current password is incorrect.';
+    } elseif (strlen($new) < 8) {
+        $formError = 'New password must be at least 8 characters.';
+    } elseif ($new !== $confirm) {
+        $formError = 'New password and confirmation do not match.';
+    } else {
+        ssms_update('staff_users', $me['id'], ['password_hash' => password_hash($new, PASSWORD_DEFAULT)]);
+        $flash = 'Your password was updated.';
+    }
+}
+
+// --- Add a new staff account --------------------------------------------
+if (isset($_POST['action']) && $_POST['action'] === 'add_staff') {
+    $username = trim($_POST['username'] ?? '');
+    $name = trim($_POST['name'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    $staffUsers = ssms_read('staff_users');
+    $taken = array_filter($staffUsers, fn($u) => strcasecmp($u['username'], $username) === 0);
+
+    if (!$username || !$name) {
+        $formError = 'Username and display name are required.';
+    } elseif (!preg_match('/^[a-zA-Z0-9._-]{3,32}$/', $username)) {
+        $formError = 'Username must be 3-32 characters: letters, numbers, dot, underscore, or hyphen only.';
+    } elseif ($taken) {
+        $formError = 'That username is already taken.';
+    } elseif (strlen($password) < 8) {
+        $formError = 'Password must be at least 8 characters.';
+    } else {
+        ssms_insert('staff_users', [
+            'username' => $username,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'name' => $name,
+        ]);
+        $flash = 'Staff account "' . htmlspecialchars($username, ENT_QUOTES) . '" created.';
+    }
+}
+
+// --- Remove a staff account ----------------------------------------------
+if (isset($_POST['action']) && $_POST['action'] === 'remove_staff' && isset($_POST['id'])) {
+    $id = (int)$_POST['id'];
+    $staffUsers = ssms_read('staff_users');
+    $target = null;
+    foreach ($staffUsers as $u) { if ((int)$u['id'] === $id) { $target = $u; break; } }
+
+    if (!$target) {
+        $formError = 'Account not found.';
+    } elseif ($target['username'] === $_SESSION['ssms_user']) {
+        $formError = 'You cannot remove the account you are currently logged in as.';
+    } elseif (count($staffUsers) <= 1) {
+        $formError = 'Cannot remove the last remaining staff account — the system would become inaccessible.';
+    } else {
+        ssms_delete('staff_users', $id);
+        $flash = 'Staff account removed.';
+    }
+}
+
+$staffUsers = ssms_read('staff_users');
+usort($staffUsers, fn($a, $b) => strcmp($a['username'], $b['username']));
+
+$page_title = 'Account Settings';
+$page_sub   = 'Manage your password and staff accounts';
+$active_page = 'account';
+include __DIR__ . '/../includes/header.php';
+?>
+
+<?php if ($flash): ?><div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> <?= $flash ?></div><?php endif; ?>
+<?php if ($formError): ?><div class="alert alert-warn"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($formError, ENT_QUOTES) ?></div><?php endif; ?>
+
+<div class="card">
+  <div class="card-head"><div><h3>Change My Password</h3><p>Signed in as <strong><?= htmlspecialchars($_SESSION['ssms_user'], ENT_QUOTES) ?></strong></p></div></div>
+  <form method="POST" style="padding:16px;">
+    <?php ssms_csrf_field(); ?>
+    <input type="hidden" name="action" value="change_password">
+    <div class="form-row three">
+      <div class="form-group"><label>Current Password</label><input type="password" name="current_password" autocomplete="current-password" required></div>
+      <div class="form-group"><label>New Password</label><input type="password" name="new_password" autocomplete="new-password" minlength="8" required></div>
+      <div class="form-group"><label>Confirm New Password</label><input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required></div>
+    </div>
+    <button type="submit" class="btn btn-navy"><i class="fa-solid fa-key"></i> Update Password</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-head"><div><h3>Add a Staff Account</h3><p>For another secretary, assistant, or administrator</p></div></div>
+  <form method="POST" style="padding:16px;">
+    <?php ssms_csrf_field(); ?>
+    <input type="hidden" name="action" value="add_staff">
+    <div class="form-row three">
+      <div class="form-group"><label>Username</label><input type="text" name="username" placeholder="e.g. secretary2" required></div>
+      <div class="form-group"><label>Display Name</label><input type="text" name="name" placeholder="e.g. Assistant Secretary's Office" required></div>
+      <div class="form-group"><label>Temporary Password</label><input type="password" name="password" minlength="8" placeholder="At least 8 characters" required></div>
+    </div>
+    <button type="submit" class="btn btn-navy"><i class="fa-solid fa-user-plus"></i> Create Account</button>
+    <p style="font-size:12px;color:var(--ink-600);margin-top:8px;">Give them this username and temporary password directly — they should change it from this same page after their first login.</p>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-head"><div><h3>Existing Staff Accounts</h3><p><?= count($staffUsers) ?> account<?= count($staffUsers) === 1 ? '' : 's' ?></p></div></div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Username</th><th>Display Name</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($staffUsers as $u): ?>
+        <tr>
+          <td><?= htmlspecialchars($u['username'], ENT_QUOTES) ?><?= $u['username'] === $_SESSION['ssms_user'] ? ' <span class="badge badge-blue" style="font-size:10px;">You</span>' : '' ?></td>
+          <td><?= htmlspecialchars($u['name'], ENT_QUOTES) ?></td>
+          <td>
+            <?php if ($u['username'] !== $_SESSION['ssms_user']): ?>
+            <form method="POST" onsubmit="return confirm('Remove staff account &quot;<?= htmlspecialchars(addslashes($u['username']), ENT_QUOTES) ?>&quot;? They will no longer be able to log in.');">
+              <?php ssms_csrf_field(); ?>
+              <input type="hidden" name="action" value="remove_staff">
+              <input type="hidden" name="id" value="<?= $u['id'] ?>">
+              <button class="btn btn-ghost btn-sm"><i class="fa-solid fa-trash"></i></button>
+            </form>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
