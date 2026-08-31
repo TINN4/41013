@@ -1,13 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/store.php';
-
-// Only the admin (username/password login) may manage device bindings —
-// QR-badge (member) sessions are blocked from this page.
-if (strpos($_SESSION['ssms_user'], 'qr:') === 0) {
-    http_response_code(403);
-    die('Only administrators can manage device bindings. <a href="modules/scheduling.php">Back to system</a>');
-}
+ssms_require_staff(); // only the admin/secretary may manage device bindings
 
 $flash = '';
 $formError = '';
@@ -126,6 +120,35 @@ include __DIR__ . '/includes/header.php';
               </form>
             </div>
           </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<?php
+$auditLog = ssms_read('login_audit');
+usort($auditLog, fn($a, $b) => strcmp($b['at'], $a['at']));
+$auditLog = array_slice($auditLog, 0, 50);
+?>
+<div class="card">
+  <div class="card-head"><div><h3>Recent Login Activity</h3><p>Last 50 QR badge scan attempts &mdash; successes and rejections both</p></div></div>
+  <p style="padding:0 16px 12px;margin:0;font-size:12.5px;color:var(--ink-600);">
+    This can't detect a spoofed GPS location itself &mdash; no browser-based system can guarantee where a phone really is. What it does give you is a record: repeated rejections from the same badge, a distance that's suspiciously exactly at the edge of the radius, or a badge suddenly used far from where it normally is, are all things worth a closer look here.
+  </p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Time</th><th>Member</th><th>Result</th><th>Distance from Office</th><th>Reason</th></tr></thead>
+      <tbody>
+        <?php if (!$auditLog): ?><tr><td colspan="5">No login attempts recorded yet.</td></tr><?php endif; ?>
+        <?php foreach ($auditLog as $log): ?>
+        <tr>
+          <td><span style="font-size:12px;color:var(--ink-600);"><?= htmlspecialchars($log['at'], ENT_QUOTES) ?></span></td>
+          <td><?= htmlspecialchars($log['member_name'] ?: '(unrecognized badge)', ENT_QUOTES) ?></td>
+          <td><?= $log['result'] === 'success' ? '<span class="badge badge-ok">Success</span>' : '<span class="badge badge-bad">Rejected</span>' ?></td>
+          <td><span style="font-size:12px;"><?= $log['distance_m'] !== null ? number_format((float)$log['distance_m']) . ' m' : '—' ?></span></td>
+          <td><span style="font-size:12px;color:var(--ink-600);"><?= htmlspecialchars($log['reason'], ENT_QUOTES) ?></span></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

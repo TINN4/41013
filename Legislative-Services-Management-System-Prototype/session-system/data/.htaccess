@@ -1,0 +1,12 @@
+# Deny all direct web access to this folder — it holds setup/migration
+# files (schema.sql, ssms_db_dump.sql) containing real session data and
+# QR badge tokens. Nothing in the live app reads from here at runtime;
+# it's only ever used manually (mysql import) during setup. Never let it
+# be reachable by URL.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

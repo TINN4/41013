@@ -47,6 +47,7 @@ $homeFile = $isStaff ? 'modules/scheduling.php' : 'modules/attendance.php';
       </div>
       <?php if (strpos($_SESSION['ssms_user'] ?? '', 'qr:') !== 0): ?>
         <a class="logout-link" href="<?= $base ?>manage_devices.php" title="Manage QR Badges & Devices" style="margin-left:auto;margin-right:4px;"><i class="fa-solid fa-qrcode"></i></a>
+        <a class="logout-link" href="<?= $base ?>modules/account.php" title="Account Settings" style="margin-right:4px;"><i class="fa-solid fa-gear"></i></a>
       <?php endif; ?>
       <a class="logout-link" href="<?= $base ?>logout.php" title="Log out" style="<?= (strpos($_SESSION['ssms_user'] ?? '', 'qr:') === 0) ? 'margin-left:auto;' : '' ?>"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
     </div>

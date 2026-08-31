@@ -39,6 +39,20 @@ if (isset($_GET['export']) && ctype_digit($_GET['export'])) {
     }
 }
 
+// --- Full system backup (all sessions, all tables) — for disaster
+// recovery, not per-session record-keeping. Same idea as the per-session
+// export above, just system-wide. Also written automatically if
+// cron_backup.php is set up on a schedule (see that file for setup).
+if (isset($_GET['export_all'])) {
+    require_once __DIR__ . '/../includes/backup.php';
+    $bundle = ssms_full_backup_array();
+    $filename = 'ssms-full-backup-' . date('Y-m-d_His') . '.json';
+    header('Content-Type: application/json');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    echo json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit();
+}
+
 // --- Restore: bring a session back out of the archive into active lists.
 if (isset($_POST['action']) && $_POST['action'] === 'restore' && isset($_POST['id'])) {
     ssms_update('sessions', (int)$_POST['id'], ['archived_at' => null]);
@@ -104,6 +118,16 @@ $page_sub   = 'Look back at completed and cancelled sessions — read-only recor
 $active_page = 'archive';
 include __DIR__ . '/../includes/header.php';
 ?>
+
+<div class="card no-print">
+  <div class="card-head">
+    <div><h3>Full System Backup</h3><p>Every session, all tables, one file — for disaster recovery, separate from any single session</p></div>
+    <a class="btn btn-navy" href="?export_all=1<?= $selectedId ? '&session_id=' . $selectedId : '' ?>"><i class="fa-solid fa-shield-halved"></i> Download Full Backup (.json)</a>
+  </div>
+  <p style="padding:0 16px 16px;margin:0;font-size:12.5px;color:var(--ink-600);">
+    This can also run automatically on a schedule — see <code>cron_backup.php</code> for setup with your hosting's cron jobs.
+  </p>
+</div>
 
 <div class="card no-print">
   <div class="select-session-bar" style="flex-wrap:wrap;">

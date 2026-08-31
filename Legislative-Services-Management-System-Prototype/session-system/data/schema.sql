@@ -53,3 +53,27 @@ CREATE TABLE IF NOT EXISTS qr_users (
   id   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   data JSON NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Secretary/admin login accounts (username + bcrypt password_hash + name).
+-- Auto-seeded with one account (admin / admin123) the first time
+-- login.php runs on a fresh install; manage further accounts from
+-- Account Settings inside the app.
+CREATE TABLE IF NOT EXISTS staff_users (
+  id   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  data JSON NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every QR badge login attempt (success and rejected), for reviewing
+-- suspicious activity — see manage_devices.php > Recent Login Activity.
+CREATE TABLE IF NOT EXISTS login_audit (
+  id   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  data JSON NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Brute-force lockout tracking for the staff login form (5 failed
+-- attempts from an IP locks it out for 15 minutes). Safe to truncate
+-- any time; it's not part of the historical record.
+CREATE TABLE IF NOT EXISTS login_throttle (
+  id   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  data JSON NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

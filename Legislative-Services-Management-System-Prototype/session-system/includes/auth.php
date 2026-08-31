@@ -1,7 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/bootstrap.php';
 
 if (empty($_SESSION['ssms_user'])) {
     $inSubfolder = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false)

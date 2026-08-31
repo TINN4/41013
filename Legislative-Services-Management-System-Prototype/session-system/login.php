@@ -1,6 +1,10 @@
 <?php
-session_start();
+require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/store.php';
+
+if (empty($_SESSION['login_csrf'])) {
+    $_SESSION['login_csrf'] = bin2hex(random_bytes(32));
+}
 
 // Staff accounts (secretary/admin) now live in the database, not in this
 // file. On a brand-new install the staff_users table is empty, so we seed
@@ -21,24 +25,55 @@ $error = '';
 if (isset($_POST['login'])) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
-    $match = null;
-    foreach ($staffUsers as $u) {
-        if (hash_equals((string)$u['username'], $username)) { $match = $u; break; }
-    }
-
-    if ($match && password_verify($password, $match['password_hash'])) {
-        // Rotate the session ID on every successful login so a session ID
-        // that existed before authentication can never be reused to hijack
-        // the now-authenticated session (session fixation).
-        session_regenerate_id(true);
-        $_SESSION['ssms_user'] = $match['username'];
-        $_SESSION['ssms_name'] = $match['name'];
-        header('Location: modules/scheduling.php');
-        exit();
+    if (!hash_equals($_SESSION['login_csrf'], $_POST['csrf_token'] ?? '')) {
+        $error = 'Your session expired. Please try again.';
+        $_SESSION['login_csrf'] = bin2hex(random_bytes(32));
     } else {
-        $error = 'Invalid username or password.';
+
+    // Brute-force lockout: 5 wrong attempts locks that IP out of the
+    // login form for 15 minutes, tracked in the login_throttle table
+    // (auto-created, same pattern as every other table here).
+    $throttle = ssms_read('login_throttle');
+    $entry = null;
+    foreach ($throttle as $t) { if ($t['ip'] === $ip) { $entry = $t; break; } }
+
+    $lockedUntil = $entry['locked_until'] ?? null;
+    if ($lockedUntil && strtotime($lockedUntil) > time()) {
+        $minutesLeft = (int)ceil((strtotime($lockedUntil) - time()) / 60);
+        $error = "Too many failed attempts. Please try again in {$minutesLeft} minute" . ($minutesLeft === 1 ? '' : 's') . '.';
+    } else {
+        $match = null;
+        foreach ($staffUsers as $u) {
+            if (hash_equals((string)$u['username'], $username)) { $match = $u; break; }
+        }
+
+        if ($match && password_verify($password, $match['password_hash'])) {
+            if ($entry) ssms_delete('login_throttle', $entry['id']); // reset on success
+            // Rotate the session ID on every successful login so a session ID
+            // that existed before authentication can never be reused to hijack
+            // the now-authenticated session (session fixation).
+            session_regenerate_id(true);
+            $_SESSION['ssms_user'] = $match['username'];
+            $_SESSION['ssms_name'] = $match['name'];
+            header('Location: modules/scheduling.php');
+            exit();
+        } else {
+            $attempts = ($entry['attempts'] ?? 0) + 1;
+            $fields = ['ip' => $ip, 'attempts' => $attempts, 'last_attempt' => date('Y-m-d H:i:s')];
+            if ($attempts >= 5) {
+                $fields['locked_until'] = date('Y-m-d H:i:s', time() + 15 * 60);
+                $error = 'Too many failed attempts. Please try again in 15 minutes.';
+            } else {
+                $fields['locked_until'] = null;
+                $error = 'Invalid username or password.';
+            }
+            if ($entry) { ssms_update('login_throttle', $entry['id'], $fields); }
+            else { ssms_insert('login_throttle', $fields); }
+        }
     }
+    } // end csrf-else
 }
 
 // Already logged in? go straight to dashboard.
@@ -93,6 +128,7 @@ if (!empty($_SESSION['ssms_user'])) {
       <?php endif; ?>
 
       <form method="POST" action="login.php">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['login_csrf'], ENT_QUOTES, 'UTF-8') ?>">
         <div class="field">
           <label for="username">Username</label>
           <div class="input-wrap">
