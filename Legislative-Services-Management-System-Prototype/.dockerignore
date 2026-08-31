@@ -1,0 +1,15 @@
+.git
+.gitignore
+README.md
+docs/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+session-system/includes/db_config.local.php
+session-system/data/*.sqlite
+session-system/data/*.sqlite3
+session-system/data/sqlite_backup_pre_mysql/
+session-system/data/json_backup_pre_sqlite/
+session-system/uploads_tmp/*
+!session-system/uploads_tmp/.gitkeep
