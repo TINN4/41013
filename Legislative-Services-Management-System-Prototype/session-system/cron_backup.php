@@ -25,6 +25,17 @@ require_once __DIR__ . '/includes/backup.php';
 $isCli = (php_sapi_name() === 'cli');
 if (!$isCli) {
     $key = $_GET['key'] ?? '';
+    $defaultKeyStillSet = hash_equals('change-this-to-a-long-random-string-before-using-the-url-method', BACKUP_SECRET_KEY);
+    if ($defaultKeyStillSet) {
+        // Refuse outright rather than silently accepting the well-known
+        // placeholder value — that string is visible to anyone who's
+        // ever seen this file (including in this project's own public
+        // GitHub repo), so leaving it unchanged would make this endpoint
+        // triggerable by literally anyone who finds the URL.
+        http_response_code(403);
+        header('Content-Type: text/plain');
+        die('Forbidden. BACKUP_SECRET_KEY is still set to its default placeholder value — change it at the top of this file before using the URL-based trigger method.');
+    }
     if (!hash_equals(BACKUP_SECRET_KEY, $key)) {
         http_response_code(403);
         header('Content-Type: text/plain');

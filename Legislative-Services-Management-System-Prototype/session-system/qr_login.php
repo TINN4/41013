@@ -77,6 +77,17 @@ function showStatus(type, html) {
   statusBox.className = 'qr-status show ' + type;
   statusBox.innerHTML = html;
 }
+function escapeHtml(s) {
+  // Member names come from Council Members (staff-entered, free text) and
+  // are otherwise unrestricted — inserting one raw into innerHTML would
+  // let a name containing "<script>" or similar run as real HTML/JS the
+  // moment that member scans their badge to log in. Route it through a
+  // text node first so the browser treats it as plain text no matter
+  // what's in it.
+  const d = document.createElement('div');
+  d.textContent = s ?? '';
+  return d.innerHTML;
+}
 
 // Persistent per-device identifier (survives reloads, tied to this browser/device).
 function getDeviceId() {
@@ -146,7 +157,7 @@ function submitLogin(token) {
       const attMsg = data.autoMarkedAttendance
         ? ' A session is ongoing — you\'ve been marked <strong>Present</strong>.'
         : '';
-      showStatus('ok', '<i class="fa-solid fa-circle-check"></i> Welcome, ' + data.name + '.' + attMsg + ' Redirecting&hellip;');
+      showStatus('ok', '<i class="fa-solid fa-circle-check"></i> Welcome, ' + escapeHtml(data.name) + '.' + attMsg + ' Redirecting&hellip;');
       setTimeout(() => { window.location.href = 'modules/attendance.php'; }, 1100);
     } else {
       setStep(stepDevice, 'failed', 'Login rejected.');

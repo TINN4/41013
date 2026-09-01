@@ -5,7 +5,13 @@
 // for anonymous visitors.
 
 function ssms_public_pick_featured_session() {
-    $sessions = ssms_read('sessions');
+    // Archived sessions are intentionally excluded here — the secretary
+    // moved them out of active view on purpose, and every other page in
+    // the app (Scheduling, Agenda, Attendance, Minutes) already filters
+    // them out the same way. Without this, an archived session could
+    // resurface as "featured" on the anonymous public dashboard even
+    // after staff deliberately archived it.
+    $sessions = array_values(array_filter(ssms_read('sessions'), fn($s) => empty($s['archived_at'])));
     if (!$sessions) return null;
 
     // 1) Prefer a session that's currently ongoing.
@@ -30,7 +36,7 @@ function ssms_public_pick_featured_session() {
 function ssms_public_upcoming_sessions($excludeId = null, $limit = 5) {
     $sessions = ssms_read('sessions');
     $upcoming = array_values(array_filter($sessions, function ($s) use ($excludeId) {
-        return ($s['status'] ?? '') === 'Scheduled' && (int)($s['id'] ?? 0) !== (int)$excludeId;
+        return empty($s['archived_at']) && ($s['status'] ?? '') === 'Scheduled' && (int)($s['id'] ?? 0) !== (int)$excludeId;
     }));
     usort($upcoming, fn($a, $b) => strcmp($a['date'] . $a['time'], $b['date'] . $b['time']));
     return array_slice($upcoming, 0, $limit);

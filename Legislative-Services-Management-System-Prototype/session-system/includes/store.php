@@ -94,34 +94,80 @@ function ssms_next_id($rows) {
 }
 
 function ssms_find($table, $id) {
-    foreach (ssms_read($table) as $r) {
-        if ((int)$r['id'] === (int)$id) return $r;
-    }
-    return null;
+    $pdo = ssms_db();
+    ssms_ensure_table($pdo, $table);
+    $t = ssms_table_name($table);
+    $stmt = $pdo->prepare("SELECT data FROM `$t` WHERE id = :id");
+    $stmt->execute([':id' => (int)$id]);
+    $data = $stmt->fetchColumn();
+    if ($data === false) return null;
+    $row = json_decode($data, true);
+    if (!is_array($row)) $row = [];
+    $row['id'] = (int)$id;
+    return $row;
 }
 
+// --- Targeted single-row operations ----------------------------------
+// IMPORTANT: these do NOT go through ssms_read()+ssms_write() (read the
+// whole table, delete every row, reinsert every row). That pattern had a
+// serious bug — under any concurrent use (e.g. two council members'
+// devices marking attendance within the same second, which is completely
+// normal usage for this app) the request that commits last would wipe out
+// whatever the other one just wrote, because both work from a full-table
+// snapshot taken before either write lands. These versions touch only the
+// one row involved, so concurrent inserts/updates/deletes on different
+// rows can never step on each other, and updates to the SAME row are
+// protected by a row lock (SELECT ... FOR UPDATE inside a transaction)
+// so a concurrent update to that specific row queues instead of racing.
+
 function ssms_insert($table, $row) {
-    $rows = ssms_read($table);
-    $row['id'] = ssms_next_id($rows);
-    $rows[] = $row;
-    ssms_write($table, $rows);
-    return $row['id'];
+    $pdo = ssms_db();
+    ssms_ensure_table($pdo, $table);
+    $t = ssms_table_name($table);
+    $payload = $row;
+    unset($payload['id']); // id lives in its own auto-increment column, not duplicated in the JSON blob
+    $stmt = $pdo->prepare("INSERT INTO `$t` (data) VALUES (:data)");
+    $stmt->execute([':data' => json_encode($payload, JSON_UNESCAPED_SLASHES)]);
+    return (int)$pdo->lastInsertId();
 }
 
 function ssms_update($table, $id, $changes) {
-    $rows = ssms_read($table);
-    foreach ($rows as &$r) {
-        if ((int)$r['id'] === (int)$id) { $r = array_merge($r, $changes); }
+    $pdo = ssms_db();
+    ssms_ensure_table($pdo, $table);
+    $t = ssms_table_name($table);
+
+    $pdo->beginTransaction();
+    try {
+        // FOR UPDATE takes a row lock for the rest of this transaction, so
+        // a second concurrent ssms_update() on this exact row waits its
+        // turn instead of both reading the same stale snapshot and one
+        // silently overwriting the other's change.
+        $stmt = $pdo->prepare("SELECT data FROM `$t` WHERE id = :id FOR UPDATE");
+        $stmt->execute([':id' => (int)$id]);
+        $current = $stmt->fetchColumn();
+        if ($current === false) {
+            $pdo->rollBack();
+            return; // row doesn't exist (already deleted, or bad id) — nothing to update, same as the old silent-no-op behavior
+        }
+        $row = json_decode($current, true);
+        if (!is_array($row)) $row = [];
+        $row = array_merge($row, $changes);
+        unset($row['id']);
+        $upd = $pdo->prepare("UPDATE `$t` SET data = :data WHERE id = :id");
+        $upd->execute([':data' => json_encode($row, JSON_UNESCAPED_SLASHES), ':id' => (int)$id]);
+        $pdo->commit();
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-    ssms_write($table, $rows);
 }
 
 function ssms_delete($table, $id) {
-    $rows = ssms_read($table);
-    $rows = array_values(array_filter($rows, function ($r) use ($id) {
-        return (int)$r['id'] !== (int)$id;
-    }));
-    ssms_write($table, $rows);
+    $pdo = ssms_db();
+    ssms_ensure_table($pdo, $table);
+    $t = ssms_table_name($table);
+    $stmt = $pdo->prepare("DELETE FROM `$t` WHERE id = :id");
+    $stmt->execute([':id' => (int)$id]);
 }
 
 function ssms_where($table, $field, $value) {

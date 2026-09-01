@@ -17,21 +17,34 @@ $selectedId = (int)$selectedId;
 $flash = '';
 
 if (isset($_POST['action']) && $_POST['action'] === 'add_item') {
-    $existing = ssms_where('agenda', 'session_id', $selectedId);
-    $nextOrder = count($existing) + 1;
-    ssms_insert('agenda', [
-        'session_id' => $selectedId,
-        'order' => $nextOrder,
-        'item' => trim($_POST['item'] ?? ''),
-        'presenter' => trim($_POST['presenter'] ?? ''),
-        'status' => 'Pending',
-    ]);
-    $flash = 'Agenda item added.';
+    $itemText = trim($_POST['item'] ?? '');
+    if ($itemText !== '') {
+        $existing = ssms_where('agenda', 'session_id', $selectedId);
+        // max(order)+1 rather than count()+1 — count() alone produces a
+        // duplicate order number as soon as any earlier item has been
+        // deleted (e.g. items ordered 1,2,3; delete #2; count()=2, so the
+        // next item would ALSO be numbered 3, and the two "#3" items'
+        // relative order would then depend on insertion order, not what
+        // the numbers on screen say).
+        $maxOrder = 0;
+        foreach ($existing as $e) { if (($e['order'] ?? 0) > $maxOrder) $maxOrder = $e['order']; }
+        ssms_insert('agenda', [
+            'session_id' => $selectedId,
+            'order' => $maxOrder + 1,
+            'item' => $itemText,
+            'presenter' => trim($_POST['presenter'] ?? ''),
+            'status' => 'Pending',
+        ]);
+        $flash = 'Agenda item added.';
+    }
 }
 
 if (isset($_POST['action']) && $_POST['action'] === 'set_status') {
-    ssms_update('agenda', (int)$_POST['id'], ['status' => $_POST['status']]);
-    $flash = 'Agenda item updated.';
+    $allowedStatuses = ['Pending', 'Discussed', 'Approved', 'Deferred'];
+    if (in_array($_POST['status'] ?? '', $allowedStatuses, true)) {
+        ssms_update('agenda', (int)$_POST['id'], ['status' => $_POST['status']]);
+        $flash = 'Agenda item updated.';
+    }
 }
 
 if (isset($_POST['action']) && $_POST['action'] === 'move' && isset($_POST['id'], $_POST['dir'])) {

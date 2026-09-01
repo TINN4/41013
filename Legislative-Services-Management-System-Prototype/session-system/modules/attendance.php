@@ -12,16 +12,28 @@ if (!$selectedId && $sessions) {
 }
 $selectedId = (int)$selectedId;
 
-if (isset($_POST['action']) && $_POST['action'] === 'mark') {
+if (isset($_POST['action']) && $_POST['action'] === 'mark' && ssms_is_staff()) {
+    // Staff-only: this page is also the landing page council members see
+    // (they can view live quorum status here), but manual marking must
+    // stay a secretary decision — see api/qr_login.php's auto-attendance,
+    // which only ever marks a member Present, never Absent/Excused, for
+    // exactly this reason. Without this check, a signed-in council
+    // member could edit the hidden member_id field in this same form
+    // (or just POST directly) and mark ANY member's attendance, or mark
+    // themselves present without ever being near the geofenced venue.
     $memberId = (int)$_POST['member_id'];
     $status = $_POST['status'];
-    $existing = array_values(array_filter(ssms_where('attendance', 'session_id', $selectedId), fn($a) => $a['member_id'] == $memberId));
-    if ($existing) {
-        ssms_update('attendance', $existing[0]['id'], ['status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
-    } else {
-        ssms_insert('attendance', ['session_id' => $selectedId, 'member_id' => $memberId, 'status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
+    $allowedStatuses = ['Present', 'Absent', 'Excused'];
+    if (in_array($status, $allowedStatuses, true)) {
+        $existing = array_values(array_filter(ssms_where('attendance', 'session_id', $selectedId), fn($a) => $a['member_id'] == $memberId));
+        if ($existing) {
+            ssms_update('attendance', $existing[0]['id'], ['status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
+        } else {
+            ssms_insert('attendance', ['session_id' => $selectedId, 'member_id' => $memberId, 'status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
+        }
     }
 }
+$isStaffUser = ssms_is_staff();
 
 $members = ssms_read('members');
 $attendance = ssms_where('attendance', 'session_id', $selectedId);
@@ -84,9 +96,16 @@ include __DIR__ . '/../includes/header.php';
         <p><?= htmlspecialchars($m['position'], ENT_QUOTES) ?><?= $timeIn ? ' &middot; In at ' . htmlspecialchars($timeIn, ENT_QUOTES) : '' ?></p>
       </div>
       <div class="seg">
+        <?php if ($isStaffUser): ?>
         <form method="POST" style="display:inline;"><?php ssms_csrf_field(); ?><input type="hidden" name="action" value="mark"><input type="hidden" name="session_id" value="<?= $selectedId ?>"><input type="hidden" name="member_id" value="<?= $m['id'] ?>"><input type="hidden" name="status" value="Present"><button class="<?= $status==='Present'?'on present':'' ?>">Present</button></form>
         <form method="POST" style="display:inline;"><?php ssms_csrf_field(); ?><input type="hidden" name="action" value="mark"><input type="hidden" name="session_id" value="<?= $selectedId ?>"><input type="hidden" name="member_id" value="<?= $m['id'] ?>"><input type="hidden" name="status" value="Excused"><button class="<?= $status==='Excused'?'on excused':'' ?>">Excused</button></form>
         <form method="POST" style="display:inline;"><?php ssms_csrf_field(); ?><input type="hidden" name="action" value="mark"><input type="hidden" name="session_id" value="<?= $selectedId ?>"><input type="hidden" name="member_id" value="<?= $m['id'] ?>"><input type="hidden" name="status" value="Absent"><button class="<?= $status==='Absent'?'on absent':'' ?>">Absent</button></form>
+        <?php else: ?>
+          <!-- Council members can watch quorum live but can't mark
+               attendance themselves — see the ssms_is_staff() check
+               above the form handler for why. -->
+          <span class="badge <?= ['Present'=>'badge-ok','Excused'=>'badge-warn','Absent'=>'badge-bad'][$status] ?? 'badge-grey' ?>"><?= htmlspecialchars($status ?? 'Not marked', ENT_QUOTES) ?></span>
+        <?php endif; ?>
       </div>
     </div>
     <?php endforeach; ?>

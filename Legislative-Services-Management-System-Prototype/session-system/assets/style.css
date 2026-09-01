@@ -27,6 +27,43 @@
   --bad-600: #C0392B;
   --bad-100: #FBE4E1;
   --sidebar-w: 264px;
+
+  /* Semantic tokens so dark mode (below) only has to redefine these,
+     instead of touching every single rule in the file. --surface is
+     "raised panel" (cards, buttons, inputs-on-focus, the menu button) —
+     kept separate from --paper (page background) because in light mode
+     they happen to both look white-ish, but in dark mode they need to be
+     two visibly different shades or cards would blend into the page.
+     --heading is for large title text (card headings, page title, stat
+     numbers) that was previously hardcoded to --navy-950, which reads
+     fine on a light card but would be almost invisible navy-on-navy once
+     that same card's background goes dark. */
+  --surface: #ffffff;
+  --topbar-bg: rgba(247, 248, 250, 0.92);
+  --heading: var(--navy-950);
+}
+
+/* ---------------- Dark mode ----------------
+   Toggled by setting data-theme="dark" on <html> (see the toggle button
+   in the topbar, wired up in assets/app.js). Preference is remembered in
+   localStorage and applied via a small blocking script in <head> before
+   first paint, so there's no flash of the light theme on reload.
+   Deliberately NOT applied to .minutes-doc / the Archive record / the
+   public dashboard (public.php) — official generated documents and the
+   public read-only view are meant to look like paper regardless of
+   which theme the person preparing them prefers, and print output
+   already forces white via @media print further down. */
+[data-theme="dark"] {
+  --paper: #0D1620;
+  --paper-alt: #16212D;
+  --surface: #1B2733;
+  --topbar-bg: rgba(13, 22, 32, 0.92);
+  --ink-900: #E7EDF5;
+  --ink-600: #93A6BB;
+  --line: #2A3847;
+  --heading: #EAF1FB;
+  --glass-bg: rgba(27, 39, 51, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -91,7 +128,7 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
 .login-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 36px 32px;
@@ -104,7 +141,7 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
   color: var(--gold-400); font-size: 22px; margin-bottom: 18px;
   box-shadow: 0 8px 20px rgba(30,77,140,0.35);
 }
-.login-card h2 { font-size: 22px; margin: 0 0 6px; color: var(--navy-950); }
+.login-card h2 { font-size: 22px; margin: 0 0 6px; color: var(--heading); }
 .login-card .sub { color: var(--ink-600); font-size: 13.5px; margin: 0 0 26px; }
 .field { margin-bottom: 16px; }
 .field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-600); margin-bottom: 6px; letter-spacing: .02em; }
@@ -116,7 +153,7 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
   font-size: 14px; color: var(--ink-900); outline: none;
   transition: border-color .15s, box-shadow .15s;
 }
-.input-wrap input:focus { border-color: var(--blue-500); box-shadow: 0 0 0 3px rgba(59,125,196,0.15); background: #fff; }
+.input-wrap input:focus { border-color: var(--blue-500); box-shadow: 0 0 0 3px rgba(59,125,196,0.15); background: var(--surface); }
 .btn-primary {
   width: 100%; padding: 12px 16px; border: none; border-radius: 10px;
   background: linear-gradient(135deg, var(--blue-700), var(--navy-950));
@@ -196,15 +233,15 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
 
 .topbar {
   position: sticky; top: 0; z-index: 30; height: 60px;
-  background: rgba(247,248,250,0.92); backdrop-filter: blur(10px);
+  background: var(--topbar-bg); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   display: flex; align-items: center; gap: 12px; padding: 0 16px;
 }
 .menu-btn {
-  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: #fff;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--navy-950);
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--heading);
 }
-.topbar .page-title { font-family: 'Fraunces', serif; font-size: 17px; color: var(--navy-950); }
+.topbar .page-title { font-family: 'Fraunces', serif; font-size: 17px; color: var(--heading); }
 .topbar .page-sub { font-size: 12px; color: var(--ink-600); }
 .topbar .spacer { flex: 1; }
 .topbar .badge-live {
@@ -214,12 +251,25 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
 .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-600); animation: pulse 1.4s infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(30,142,90,0.5);} 70% { box-shadow: 0 0 0 8px rgba(30,142,90,0);} 100% { box-shadow: 0 0 0 0 rgba(30,142,90,0);} }
 
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--heading);
+  font-size: 14px; flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--blue-500); }
+/* Swap which icon shows based on the current theme, rather than
+   rewriting the icon with JS — one less thing that can get out of sync
+   with the actual data-theme attribute if something goes wrong. */
+.theme-toggle .fa-sun { display: none; }
+[data-theme="dark"] .theme-toggle .fa-moon { display: none; }
+[data-theme="dark"] .theme-toggle .fa-sun { display: inline; }
+
 .content { flex: 1; padding: 20px 16px 60px; max-width: 1200px; width: 100%; margin: 0 auto; }
 
 /* cards / tables reused across all modules */
-.card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 6px 20px rgba(10,31,61,0.04); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 6px 20px rgba(10,31,61,0.04); }
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.card-head h3 { margin: 0 0 4px; font-size: 16px; color: var(--navy-950); font-family: 'Fraunces', serif; }
+.card-head h3 { margin: 0 0 4px; font-size: 16px; color: var(--heading); font-family: 'Fraunces', serif; }
 .card-head p { margin: 0; font-size: 12.5px; color: var(--ink-600); }
 
 .grid { display: grid; gap: 16px; }
@@ -231,7 +281,7 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
 .stat {
   background: var(--paper-alt); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
 }
-.stat .num { font-family: 'Fraunces', serif; font-size: 24px; color: var(--navy-950); }
+.stat .num { font-family: 'Fraunces', serif; font-size: 24px; color: var(--heading); }
 .stat .lbl { font-size: 11.5px; color: var(--ink-600); text-transform: uppercase; letter-spacing: .05em; }
 
 .form-row { display: grid; gap: 12px; grid-template-columns: 1fr; margin-bottom: 12px; }
@@ -241,14 +291,14 @@ input, select, textarea, button { font-family: 'Inter', sans-serif; }
   width: 100%; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--paper-alt); font-size: 13.5px; outline: none; color: var(--ink-900);
 }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--blue-500); background: #fff; box-shadow: 0 0 0 3px rgba(59,125,196,0.12); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--blue-500); background: var(--surface); box-shadow: 0 0 0 3px rgba(59,125,196,0.12); }
 .form-group textarea { resize: vertical; min-height: 80px; }
 
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
 .btn-navy { background: linear-gradient(135deg, var(--blue-700), var(--navy-950)); color: #fff; box-shadow: 0 8px 18px rgba(10,31,61,0.22); }
 .btn-navy:hover { transform: translateY(-1px); }
 .btn-gold { background: linear-gradient(135deg, var(--gold-500), var(--gold-400)); color: var(--navy-950); }
-.btn-ghost { background: #fff; border-color: var(--line); color: var(--ink-900); }
+.btn-ghost { background: var(--surface); border-color: var(--line); color: var(--ink-900); }
 .btn-danger { background: var(--bad-100); color: var(--bad-600); border-color: rgba(192,57,43,0.2); }
 .btn-sm { padding: 6px 11px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -286,20 +336,20 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .attend-list { display: flex; flex-direction: column; gap: 8px; }
 .attend-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; flex-wrap: wrap; }
 .attend-row .who { flex: 1; min-width: 160px; }
-.attend-row .who p:first-child { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--navy-950); }
+.attend-row .who p:first-child { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--heading); }
 .attend-row .who p:last-child { margin: 0; font-size: 11.5px; color: var(--ink-600); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
-.seg button { border: none; background: #fff; padding: 7px 11px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink-600); }
+.seg button { border: none; background: var(--surface); padding: 7px 11px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink-600); }
 .seg button.on.present { background: var(--ok-100); color: var(--ok-600); }
 .seg button.on.absent { background: var(--bad-100); color: var(--bad-600); }
 .seg button.on.excused { background: var(--warn-100); color: var(--warn-600); }
 
 .agenda-list { display: flex; flex-direction: column; gap: 10px; }
 .agenda-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
-.agenda-item .num { width: 26px; height: 26px; border-radius: 8px; background: var(--paper-alt); color: var(--navy-950); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.agenda-item .num { width: 26px; height: 26px; border-radius: 8px; background: var(--paper-alt); color: var(--heading); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .agenda-item.current { border-color: var(--gold-500); background: var(--gold-100); }
 .agenda-item .body { flex: 1; min-width: 0; }
-.agenda-item .body p.title { margin: 0 0 3px; font-size: 13.5px; font-weight: 600; color: var(--navy-950); }
+.agenda-item .body p.title { margin: 0 0 3px; font-size: 13.5px; font-weight: 600; color: var(--heading); }
 .agenda-item .body p.meta { margin: 0; font-size: 11.5px; color: var(--ink-600); }
 
 .log-feed { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; padding-right: 4px; }

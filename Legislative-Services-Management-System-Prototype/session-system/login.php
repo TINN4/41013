@@ -103,6 +103,14 @@ if (!empty($_SESSION['ssms_user'])) {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="assets/style.css">
+<script>
+(function () {
+  try {
+    var saved = localStorage.getItem('ssms_theme');
+    if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) { /* localStorage unavailable — default to light */ }
+})();
+</script>
 </head>
 <body>
 
@@ -120,7 +128,12 @@ if (!empty($_SESSION['ssms_user'])) {
   <!-- RIGHT: login form -->
   <div class="login-form-col">
     <div class="login-card">
-      <div class="lc-seal"><i class="fa-solid fa-gavel"></i></div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div class="lc-seal"><i class="fa-solid fa-gavel"></i></div>
+        <button type="button" class="theme-toggle" id="ssms-theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <i class="fa-solid fa-moon"></i><i class="fa-solid fa-sun"></i>
+        </button>
+      </div>
       <h2>Welcome back</h2>
       <p class="sub">Sign in to manage sessions, agendas, and minutes.</p>
 
@@ -166,6 +179,17 @@ function ssmsTogglePw() {
   input.type = isHidden ? 'text' : 'password';
   icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
 }
+
+(function () {
+  const themeBtn = document.getElementById('ssms-theme-toggle');
+  if (!themeBtn) return;
+  themeBtn.addEventListener('click', function () {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) { document.documentElement.removeAttribute('data-theme'); }
+    else { document.documentElement.setAttribute('data-theme', 'dark'); }
+    try { localStorage.setItem('ssms_theme', isDark ? 'light' : 'dark'); } catch (e) { /* private browsing — theme still applies for this view */ }
+  });
+})();
 
 <?php if ($lockoutUntilTimestamp): ?>
 // Live countdown for the lockout message. The source of truth is always

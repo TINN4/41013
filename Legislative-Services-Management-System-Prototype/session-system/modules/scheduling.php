@@ -27,15 +27,29 @@ if (isset($_POST['action']) && $_POST['action'] === 'create') {
 if (isset($_POST['action']) && $_POST['action'] === 'set_status' && isset($_POST['id'])) {
     $id = (int)$_POST['id'];
     $newStatus = $_POST['status'];
-    $changes = ['status' => $newStatus];
-    if ($newStatus === 'Ongoing') $changes['started_at'] = time();
-    ssms_update('sessions', $id, $changes);
-    $flash = 'Session status updated.';
+    // Whitelist: without this, a crafted POST could set a session's
+    // status to any arbitrary string, which would then fail to match
+    // any of the badge-color/workflow-button cases elsewhere on this
+    // page and silently show as a grey "unknown" badge forever.
+    $allowedStatuses = ['Scheduled', 'Ongoing', 'Completed', 'Cancelled'];
+    if (in_array($newStatus, $allowedStatuses, true)) {
+        $changes = ['status' => $newStatus];
+        if ($newStatus === 'Ongoing') $changes['started_at'] = time();
+        ssms_update('sessions', $id, $changes);
+        $flash = 'Session status updated.';
+    }
 }
 
 if (isset($_POST['action']) && $_POST['action'] === 'archive' && isset($_POST['id'])) {
-    ssms_update('sessions', (int)$_POST['id'], ['archived_at' => date('Y-m-d H:i:s')]);
-    $flash = 'Session moved to Archive. You can find and restore it from the Archive page anytime.';
+    // Only Completed/Cancelled sessions are meant to be archivable — the
+    // buttons on this page already only show Archive for those statuses,
+    // this just makes sure a crafted POST can't archive a Scheduled or
+    // still-Ongoing session out from under an active meeting.
+    $s = ssms_find('sessions', (int)$_POST['id']);
+    if ($s && in_array($s['status'], ['Completed', 'Cancelled'], true)) {
+        ssms_update('sessions', (int)$_POST['id'], ['archived_at' => date('Y-m-d H:i:s')]);
+        $flash = 'Session moved to Archive. You can find and restore it from the Archive page anytime.';
+    }
 }
 
 if (isset($_POST['action']) && $_POST['action'] === 'delete' && isset($_POST['id'])) {

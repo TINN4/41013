@@ -85,7 +85,7 @@ $active_page = 'account';
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<?php if ($flash): ?><div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> <?= $flash ?></div><?php endif; ?>
+<?php if ($flash): ?><div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> <?= htmlspecialchars($flash, ENT_QUOTES) ?></div><?php endif; ?>
 <?php if ($formError): ?><div class="alert alert-warn"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($formError, ENT_QUOTES) ?></div><?php endif; ?>
 
 <div class="card">

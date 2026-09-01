@@ -12,6 +12,13 @@ header('Content-Type: application/json');
 
 $sessionId = isset($_GET['session_id']) ? (int)$_GET['session_id'] : null;
 $session = $sessionId ? ssms_find('sessions', $sessionId) : ssms_public_pick_featured_session();
+// Archived sessions are off-limits here too, same reasoning as
+// ssms_public_pick_featured_session() in includes/public_data.php —
+// otherwise requesting an old session's id directly would bypass that
+// filter entirely.
+if ($session && !empty($session['archived_at'])) {
+    $session = null;
+}
 
 if (!$session) {
     echo json_encode(['found' => false, 'server_time' => date('H:i:s')]);

@@ -24,6 +24,24 @@ document.addEventListener('DOMContentLoaded', function () {
       if (window.innerWidth < 1024) closeSidebar();
     });
   });
+
+  // Dark mode toggle. The actual theme is already applied before this
+  // script even runs (see the blocking script in includes/header.php's
+  // <head>) — this just handles the click and remembers the choice.
+  var themeBtn = document.getElementById('ssms-theme-toggle');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+      try {
+        localStorage.setItem('ssms_theme', isDark ? 'light' : 'dark');
+      } catch (e) { /* private browsing / storage disabled — theme still applies for this page view, just won't persist */ }
+    });
+  }
 });
 
 // Elapsed-time ticker for Real-Time Session Tracking (data-started="unix timestamp")
