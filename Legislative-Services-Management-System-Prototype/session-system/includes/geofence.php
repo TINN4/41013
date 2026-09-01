@@ -4,11 +4,18 @@
  * Edit the values below to match your actual office location and policy.
  */
 
-// City Hall — Sangguniang Panlungsod ng San Jose del Monte, Bulacan.
-// (Source: public GPS coordinate listings for the City of San Jose del Monte
-// municipal building. Adjust to your exact building's coordinates for accuracy.)
-define('SSMS_OFFICE_LAT', 14.81053705);
-define('SSMS_OFFICE_LNG', 121.046147894731);
+// TEMPORARY TESTING LOCATION — Bestlink College of the Philippines, MV
+// Campus, #762 Topaz corner Sapphire St., Millionaire's Village,
+// Novaliches, Quezon City. Set here for local testing purposes.
+// >>> REMEMBER TO CHANGE THIS BACK to City Hall's real coordinates
+// >>> before the actual presentation/deployment — see the original
+// >>> values commented below.
+define('SSMS_OFFICE_LAT', 14.7266066);
+define('SSMS_OFFICE_LNG', 121.0372218);
+
+// --- Original production value (City Hall) — restore this before go-live: ---
+// define('SSMS_OFFICE_LAT', 14.81053705);
+// define('SSMS_OFFICE_LNG', 121.046147894731);
 
 // Allowed radius, in meters, from the office coordinates above.
 // GPS accuracy indoors/urban areas is commonly ±20-50m, so keep this
