@@ -118,6 +118,6 @@ window.addEventListener('pageshow', function (event) {
 </script>
 <?php endif; ?>
 
-<script src="<?= $base ?>assets/app.js"></script>
+<script src="<?= $base ?>assets/app.js?v=<?= filemtime(__DIR__ . '/../assets/app.js') ?>"></script>
 </body>
 </html>
