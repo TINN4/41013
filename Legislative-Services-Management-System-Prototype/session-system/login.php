@@ -22,27 +22,35 @@ if (!$staffUsers) {
 }
 
 $error = '';
-if (isset($_POST['login'])) {
+$lockoutUntilTimestamp = null; // fed to JS below for a live, reload-proof countdown
+$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+// Brute-force lockout: 5 wrong attempts locks that IP out of the login
+// form for 10 minutes, tracked in the login_throttle table (auto-created,
+// same pattern as every other table here). This check runs on EVERY page
+// load — not just after a failed POST — so if the page is reloaded, or
+// opened fresh, mid-lockout, the remaining time shown is still accurate:
+// the source of truth is the locked_until timestamp stored server-side,
+// never anything kept only in the browser.
+$throttle = ssms_read('login_throttle');
+$entry = null;
+foreach ($throttle as $t) { if ($t['ip'] === $ip) { $entry = $t; break; } }
+
+$lockedUntil = $entry['locked_until'] ?? null;
+$isLockedOut = $lockedUntil && strtotime($lockedUntil) > time();
+if ($isLockedOut) {
+    $minutesLeft = (int)ceil((strtotime($lockedUntil) - time()) / 60);
+    $error = "Too many failed attempts. Please try again in {$minutesLeft} minute" . ($minutesLeft === 1 ? '' : 's') . '.';
+    $lockoutUntilTimestamp = strtotime($lockedUntil);
+}
+
+if (isset($_POST['login']) && !$isLockedOut) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
     if (!hash_equals($_SESSION['login_csrf'], $_POST['csrf_token'] ?? '')) {
         $error = 'Your session expired. Please try again.';
         $_SESSION['login_csrf'] = bin2hex(random_bytes(32));
-    } else {
-
-    // Brute-force lockout: 5 wrong attempts locks that IP out of the
-    // login form for 15 minutes, tracked in the login_throttle table
-    // (auto-created, same pattern as every other table here).
-    $throttle = ssms_read('login_throttle');
-    $entry = null;
-    foreach ($throttle as $t) { if ($t['ip'] === $ip) { $entry = $t; break; } }
-
-    $lockedUntil = $entry['locked_until'] ?? null;
-    if ($lockedUntil && strtotime($lockedUntil) > time()) {
-        $minutesLeft = (int)ceil((strtotime($lockedUntil) - time()) / 60);
-        $error = "Too many failed attempts. Please try again in {$minutesLeft} minute" . ($minutesLeft === 1 ? '' : 's') . '.';
     } else {
         $match = null;
         foreach ($staffUsers as $u) {
@@ -63,17 +71,18 @@ if (isset($_POST['login'])) {
             $attempts = ($entry['attempts'] ?? 0) + 1;
             $fields = ['ip' => $ip, 'attempts' => $attempts, 'last_attempt' => date('Y-m-d H:i:s')];
             if ($attempts >= 5) {
-                $fields['locked_until'] = date('Y-m-d H:i:s', time() + 15 * 60);
-                $error = 'Too many failed attempts. Please try again in 15 minutes.';
+                $newLockedUntil = date('Y-m-d H:i:s', time() + 10 * 60);
+                $fields['locked_until'] = $newLockedUntil;
+                $error = 'Too many failed attempts. Please try again in 10 minutes.';
+                $lockoutUntilTimestamp = strtotime($newLockedUntil);
             } else {
                 $fields['locked_until'] = null;
-                $error = 'Invalid username or password.';
+                $error = 'Invalid username or password. ' . (5 - $attempts) . ' attempt' . ((5 - $attempts) === 1 ? '' : 's') . ' remaining before a temporary lockout.';
             }
             if ($entry) { ssms_update('login_throttle', $entry['id'], $fields); }
             else { ssms_insert('login_throttle', $fields); }
         }
     }
-    } // end csrf-else
 }
 
 // Already logged in? go straight to dashboard.
@@ -105,14 +114,6 @@ if (!empty($_SESSION['ssms_user'])) {
       <span class="eyebrow"><i class="fa-solid fa-landmark-dome"></i> Sangguniang Panlungsod ng San Jose del Monte</span>
       <h1>Session and Legislative Meeting Management System</h1>
       <p>A dedicated workspace for scheduling sessions, preparing agendas, tracking attendance and quorum, documenting proceedings, and generating official minutes &mdash; in real time.</p>
-      <ul>
-        <li><i class="fa-solid fa-calendar-check"></i> Session Scheduling</li>
-        <li><i class="fa-solid fa-list-check"></i> Agenda Preparation</li>
-        <li><i class="fa-solid fa-user-check"></i> Attendance &amp; Quorum Monitoring</li>
-        <li><i class="fa-solid fa-file-lines"></i> Proceedings Documentation</li>
-        <li><i class="fa-solid fa-file-signature"></i> Minutes Generation</li>
-        <li><i class="fa-solid fa-tower-broadcast"></i> Real-Time Session Tracking</li>
-      </ul>
     </div>
   </div>
 
@@ -125,6 +126,8 @@ if (!empty($_SESSION['ssms_user'])) {
 
       <?php if ($error): ?>
         <div class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+      <?php elseif (($_GET['reason'] ?? '') === 'idle'): ?>
+        <div class="login-error" style="background:#eef2ff;border-color:#c7d2fe;color:#3730a3;"><i class="fa-solid fa-clock"></i> You were signed out after being inactive for a while. Please log in again.</div>
       <?php endif; ?>
 
       <form method="POST" action="login.php">
@@ -141,9 +144,10 @@ if (!empty($_SESSION['ssms_user'])) {
           <div class="input-wrap">
             <i class="fa-solid fa-lock"></i>
             <input type="password" id="password" name="password" placeholder="********" autocomplete="current-password" required>
+            <button type="button" id="pw-toggle" onclick="ssmsTogglePw()" aria-label="Show password" style="background:none;border:0;cursor:pointer;color:var(--ink-600);padding:0 4px;"><i class="fa-solid fa-eye"></i></button>
           </div>
         </div>
-        <button type="submit" name="login" class="btn-primary"><i class="fa-solid fa-right-to-bracket"></i> Login to the Portal</button>
+        <button type="submit" name="login" class="btn-primary" <?= $isLockedOut ? 'disabled' : '' ?>><i class="fa-solid fa-right-to-bracket"></i> Login to the Portal</button>
       </form>
 
       <a href="qr_login.php" class="btn-primary" style="margin-top:14px; background:linear-gradient(135deg, var(--gold-500), var(--gold-400)); color:var(--navy-950); box-shadow:0 10px 24px rgba(201,162,39,0.25);"><i class="fa-solid fa-qrcode"></i> Council Member / Staff? Scan QR Badge</a>
@@ -153,6 +157,46 @@ if (!empty($_SESSION['ssms_user'])) {
   </div>
 
 </div>
+
+<script>
+function ssmsTogglePw() {
+  const input = document.getElementById('password');
+  const icon = document.querySelector('#pw-toggle i');
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+
+<?php if ($lockoutUntilTimestamp): ?>
+// Live countdown for the lockout message. The source of truth is always
+// the server (login_throttle.locked_until) — this timer is purely
+// cosmetic, so reloading the page, closing the tab, or the countdown
+// hitting 0 early due to clock drift never lets anyone log in early;
+// the PHP check above re-verifies the real remaining time on every load.
+(function () {
+  const unlockAt = <?= (int)$lockoutUntilTimestamp ?> * 1000; // ms, server-computed
+  const errorBox = document.querySelector('.login-error');
+  if (!errorBox) return;
+
+  function tick() {
+    const msLeft = unlockAt - Date.now();
+    if (msLeft <= 0) {
+      errorBox.innerHTML = '<i class="fa-solid fa-circle-check"></i> You can try logging in again now.';
+      const btn = document.querySelector('button[name="login"]');
+      if (btn) btn.disabled = false;
+      return; // stop counting; if the user submits early due to clock drift, the server re-checks anyway
+    }
+    const totalSeconds = Math.ceil(msLeft / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    errorBox.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Too many failed attempts. Please try again in '
+      + m + ':' + String(s).padStart(2, '0') + '.';
+    setTimeout(tick, 1000);
+  }
+  tick();
+})();
+<?php endif; ?>
+</script>
 
 </body>
 </html>

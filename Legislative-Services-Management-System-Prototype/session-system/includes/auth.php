@@ -9,12 +9,43 @@ if (empty($_SESSION['ssms_user'])) {
     exit();
 }
 
+// --- Idle (AFK) session timeout -----------------------------------------
+// 20 minutes of no activity logs the user out automatically. This check is
+// server-side and is the real source of truth — the on-screen warning at
+// 15 minutes and the countdown in includes/footer.php are just a courtesy
+// heads-up; even with JavaScript disabled or tampered with, this check
+// still fires the moment the next request comes in after the timeout.
+//
+// Only staff (admin/secretary) logins get this. QR/council-member sessions
+// are meant to stay open for an entire multi-hour session on a shared
+// device without repeated re-scans, same reasoning as the bfcache guard
+// below — logging those out for going quiet mid-session would be more
+// disruptive than protective.
+const SSMS_IDLE_TIMEOUT_SECONDS = 20 * 60;
+$ssms_is_staff_now = strpos($_SESSION['ssms_user'], 'qr:') !== 0;
+if ($ssms_is_staff_now) {
+    if (!empty($_SESSION['ssms_last_activity']) && (time() - $_SESSION['ssms_last_activity']) > SSMS_IDLE_TIMEOUT_SECONDS) {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        $inSubfolder = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false)
+                    || (strpos($_SERVER['SCRIPT_NAME'], '/api/') !== false);
+        $base = $inSubfolder ? '../' : '';
+        header('Location: ' . $base . 'login.php?reason=idle');
+        exit();
+    }
+    $_SESSION['ssms_last_activity'] = time();
+}
+
 // Stop the browser from showing a cached, still-"logged in" copy of this page
 // when the Back button is pressed after logging out. Only staff accounts
 // (admin/secretary, who sign in/out through the login form) get this —
 // QR/council-member sessions are left alone since those devices stay
 // signed in for the whole session and aren't driven by manual login/logout.
-$isStaffSession = strpos($_SESSION['ssms_user'], 'qr:') !== 0;
+$isStaffSession = $ssms_is_staff_now;
 if ($isStaffSession) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');

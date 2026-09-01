@@ -38,3 +38,8 @@ if (session_status() === PHP_SESSION_NONE) {
 header('X-Content-Type-Options: nosniff');   // stop browsers from guessing/mis-sniffing content types
 header('X-Frame-Options: DENY');             // stop the whole app from being embedded in another site's <iframe> (clickjacking)
 header('Referrer-Policy: strict-origin-when-cross-origin');
+// Voice dictation on the Proceedings page needs microphone access. Some
+// hosts/proxies send a default Permissions-Policy that blocks it; being
+// explicit here means that feature never silently fails because of an
+// environment default outside this app's control.
+header('Permissions-Policy: microphone=(self)');
