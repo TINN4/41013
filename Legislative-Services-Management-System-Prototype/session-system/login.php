@@ -156,8 +156,8 @@ if (!empty($_SESSION['ssms_user'])) {
           <label for="password">Password</label>
           <div class="input-wrap">
             <i class="fa-solid fa-lock"></i>
-            <input type="password" id="password" name="password" placeholder="********" autocomplete="current-password" required>
-            <button type="button" id="pw-toggle" onclick="ssmsTogglePw()" aria-label="Show password" style="background:none;border:0;cursor:pointer;color:var(--ink-600);padding:0 4px;"><i class="fa-solid fa-eye"></i></button>
+            <input type="password" id="password" name="password" placeholder="********" autocomplete="current-password" class="has-toggle" required>
+            <button type="button" id="pw-toggle" class="pw-toggle-btn" onclick="ssmsTogglePw()" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
           </div>
         </div>
         <button type="submit" name="login" class="btn-primary" <?= $isLockedOut ? 'disabled' : '' ?>><i class="fa-solid fa-right-to-bracket"></i> Login to the Portal</button>
