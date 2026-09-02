@@ -64,6 +64,18 @@ function ssms_is_staff() {
     return strpos($_SESSION['ssms_user'] ?? '', 'qr:') !== 0;
 }
 
+// True only for the Admin role specifically — a narrower check than
+// ssms_is_staff(). Regular Secretary accounts do the day-to-day work
+// (sessions, agenda, attendance, proceedings, minutes) exactly as before;
+// only Admins can manage OTHER staff accounts — creating them, removing
+// them, resetting a locked-out colleague's password, or changing anyone's
+// role. This split exists so one compromised or careless Secretary
+// account can't remove every other login, and so there's always a clear
+// answer to "who's allowed to manage accounts" for anyone who asks.
+function ssms_is_admin() {
+    return ssms_is_staff() && (($_SESSION['ssms_role'] ?? 'admin') === 'admin');
+}
+
 // Call at the top of any module that only the secretary/admin should be
 // able to open (Scheduling, Agenda, Members, Proceedings, Minutes, ...).
 // Council members who try to reach the URL directly get bounced to their

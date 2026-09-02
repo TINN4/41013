@@ -17,6 +17,7 @@ if (!$staffUsers) {
         'username'      => 'admin',
         'password_hash' => password_hash('admin123', PASSWORD_DEFAULT),
         'name'          => "Secretary's Office",
+        'role'          => 'admin',
     ]);
     $staffUsers = ssms_read('staff_users');
 }
@@ -65,6 +66,15 @@ if (isset($_POST['login']) && !$isLockedOut) {
             session_regenerate_id(true);
             $_SESSION['ssms_user'] = $match['username'];
             $_SESSION['ssms_name'] = $match['name'];
+            // Accounts created before roles existed won't have a 'role' key
+            // at all — treating that as 'admin' means every pre-existing
+            // account keeps its current full access with no migration step
+            // needed. Cached in session (like ssms_name already is) rather
+            // than looked up fresh on every page — the tradeoff is that a
+            // role change by another admin only takes effect the next time
+            // that person logs in, not mid-session, which is an acceptable
+            // and common tradeoff for an app this size.
+            $_SESSION['ssms_role'] = $match['role'] ?? 'admin';
             header('Location: modules/scheduling.php');
             exit();
         } else {
