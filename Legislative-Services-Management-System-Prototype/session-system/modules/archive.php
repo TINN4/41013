@@ -193,15 +193,18 @@ include __DIR__ . '/../includes/header.php';
     <tr><td><strong>Date / Time</strong></td><td><?= htmlspecialchars($currentSession['date'], ENT_QUOTES) ?> &middot; <?= htmlspecialchars($currentSession['time'], ENT_QUOTES) ?></td></tr>
     <tr><td><strong>Venue</strong></td><td><?= htmlspecialchars($currentSession['venue'], ENT_QUOTES) ?></td></tr>
     <tr><td><strong>Final Status</strong></td><td><span class="badge <?= $currentSession['status'] === 'Completed' ? 'badge-ok' : 'badge-bad' ?>"><?= htmlspecialchars($currentSession['status'], ENT_QUOTES) ?></span></td></tr>
+    <?php if (!empty($currentSession['created_by'])): ?>
+    <tr><td><strong>Created By</strong></td><td><?= htmlspecialchars($currentSession['created_by'], ENT_QUOTES) ?></td></tr>
+    <?php endif; ?>
   </table>
 
   <h3 style="font-family:'Fraunces',serif;color:var(--navy-950);">I. Attendance</h3>
   <table>
-    <tr><th style="width:33%;">Name</th><th style="width:33%;">Status</th><th style="width:34%;">Time In</th></tr>
-    <?php foreach ($members as $m): $st = $attByMember[$m['id']]['status'] ?? 'Absent'; $ti = $attByMember[$m['id']]['time_in'] ?? '—'; ?>
-      <tr><td><?= htmlspecialchars($m['name'], ENT_QUOTES) ?></td><td><?= htmlspecialchars($st, ENT_QUOTES) ?></td><td><?= htmlspecialchars($ti, ENT_QUOTES) ?></td></tr>
+    <tr><th style="width:26%;">Name</th><th style="width:16%;">Status</th><th style="width:16%;">Time In</th><th>Marked By</th></tr>
+    <?php foreach ($members as $m): $st = $attByMember[$m['id']]['status'] ?? 'Absent'; $ti = $attByMember[$m['id']]['time_in'] ?? '—'; $mb = $attByMember[$m['id']]['marked_by'] ?? '—'; ?>
+      <tr><td><?= htmlspecialchars($m['name'], ENT_QUOTES) ?></td><td><?= htmlspecialchars($st, ENT_QUOTES) ?></td><td><?= htmlspecialchars($ti, ENT_QUOTES) ?></td><td><?= htmlspecialchars($mb, ENT_QUOTES) ?></td></tr>
     <?php endforeach; ?>
-    <?php if (!$members): ?><tr><td colspan="3">No council members on record.</td></tr><?php endif; ?>
+    <?php if (!$members): ?><tr><td colspan="4">No council members on record.</td></tr><?php endif; ?>
   </table>
 
   <h3 style="font-family:'Fraunces',serif;color:var(--navy-950);">II. Agenda &amp; Disposition</h3>

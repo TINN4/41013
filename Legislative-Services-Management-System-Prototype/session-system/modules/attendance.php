@@ -26,10 +26,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'mark' && ssms_is_staff()) {
     $allowedStatuses = ['Present', 'Absent', 'Excused'];
     if (in_array($status, $allowedStatuses, true)) {
         $existing = array_values(array_filter(ssms_where('attendance', 'session_id', $selectedId), fn($a) => $a['member_id'] == $memberId));
+        $changes = ['status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null, 'marked_by' => $_SESSION['ssms_name'] ?? 'Unknown'];
         if ($existing) {
-            ssms_update('attendance', $existing[0]['id'], ['status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
+            ssms_update('attendance', $existing[0]['id'], $changes);
         } else {
-            ssms_insert('attendance', ['session_id' => $selectedId, 'member_id' => $memberId, 'status' => $status, 'time_in' => $status === 'Present' ? date('H:i') : null]);
+            ssms_insert('attendance', array_merge(['session_id' => $selectedId, 'member_id' => $memberId], $changes));
         }
     }
 }

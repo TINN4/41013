@@ -41,7 +41,7 @@ $base = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false) ? '../' : '';
       </div>
       <div class="spacer"></div>
       <?php if (!empty($show_live_badge)): ?>
-        <span class="badge-live"><span class="pulse-dot"></span> Live</span>
+        <span class="badge-live" id="ssms-live-badge-wrap"><span class="pulse-dot"></span> <span id="ssms-live-badge">Live</span></span>
       <?php endif; ?>
       <button class="theme-toggle" id="ssms-theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
         <i class="fa-solid fa-moon"></i><i class="fa-solid fa-sun"></i>

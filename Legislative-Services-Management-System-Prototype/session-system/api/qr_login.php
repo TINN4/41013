@@ -106,7 +106,7 @@ if (!empty($user['memberId'])) {
         ));
         if ($existing) {
             if ($existing[0]['status'] !== 'Present') {
-                ssms_update('attendance', $existing[0]['id'], ['status' => 'Present', 'time_in' => date('H:i')]);
+                ssms_update('attendance', $existing[0]['id'], ['status' => 'Present', 'time_in' => date('H:i'), 'marked_by' => $user['name'] . ' (QR self check-in)']);
             }
         } else {
             ssms_insert('attendance', [
@@ -114,6 +114,7 @@ if (!empty($user['memberId'])) {
                 'member_id'  => (int)$user['memberId'],
                 'status'     => 'Present',
                 'time_in'    => date('H:i'),
+                'marked_by'  => $user['name'] . ' (QR self check-in)',
             ]);
         }
         $autoMarked = true;

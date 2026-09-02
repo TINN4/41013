@@ -18,6 +18,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'create') {
             'title' => $title, 'type' => $type, 'date' => $date, 'time' => $time,
             'venue' => $venue, 'status' => 'Scheduled', 'started_at' => null,
             'current_agenda_id' => null, 'created_at' => date('Y-m-d H:i:s'),
+            // Only Proceedings entries used to record who did what — this
+            // gives Sessions the same accountability, using the name
+            // already sitting in the session from login, no new lookup.
+            'created_by' => $_SESSION['ssms_name'] ?? 'Unknown',
         ]);
         $flash = 'Session scheduled successfully.';
     }
@@ -114,7 +118,7 @@ include __DIR__ . '/../includes/header.php';
           $badgeClass = ['Scheduled' => 'badge-blue', 'Ongoing' => 'badge-gold', 'Completed' => 'badge-ok', 'Cancelled' => 'badge-bad'][$s['status']] ?? 'badge-grey';
         ?>
         <tr>
-          <td><?= htmlspecialchars($s['title'], ENT_QUOTES) ?></td>
+          <td title="<?= isset($s['created_by']) ? 'Created by ' . htmlspecialchars($s['created_by'], ENT_QUOTES) : '' ?>"><?= htmlspecialchars($s['title'], ENT_QUOTES) ?></td>
           <td><?= htmlspecialchars($s['type'], ENT_QUOTES) ?></td>
           <td><?= htmlspecialchars($s['date'], ENT_QUOTES) ?></td>
           <td><?= htmlspecialchars($s['time'], ENT_QUOTES) ?></td>

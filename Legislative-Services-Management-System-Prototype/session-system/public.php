@@ -150,6 +150,25 @@ function ssmsPublicRefresh() {
       if (!data.found) return;
       document.getElementById('pub-server-time').textContent = data.server_time;
 
+      // The status badge and "Live now" indicator were being computed by
+      // the server on every poll and then silently thrown away — if a
+      // session got marked Completed while someone had this page open,
+      // the badge here would keep showing "Ongoing" until they manually
+      // refreshed. Update both from data.session.status every poll too.
+      document.getElementById('pub-status-badge').innerHTML = ssmsPublicBadge(data.session.status);
+      const card = document.getElementById('pub-session-card');
+      let liveBadge = card.querySelector('.badge-live');
+      if (data.session.status === 'Ongoing' && !liveBadge) {
+        const cardHead = card.querySelector('.card-head');
+        const span = document.createElement('span');
+        span.className = 'badge-live';
+        span.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:var(--ok-100);color:var(--ok-600);font-size:11.5px;font-weight:700;';
+        span.innerHTML = '<span class="pulse-dot"></span> Live now';
+        cardHead.appendChild(span);
+      } else if (data.session.status !== 'Ongoing' && liveBadge) {
+        liveBadge.remove();
+      }
+
       const q = data.quorum;
       document.getElementById('pub-quorum-text').textContent =
         q.present + ' of ' + q.total + ' present · ' + q.needed + ' needed';

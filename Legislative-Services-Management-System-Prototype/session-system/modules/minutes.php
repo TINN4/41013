@@ -35,6 +35,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'generate' && $currentSessio
     $id = ssms_insert('minutes', [
         'session_id' => $selectedId,
         'generated_at' => date('Y-m-d H:i:s'),
+        'generated_by' => $_SESSION['ssms_name'] ?? 'Unknown',
         'present' => $presentNames,
         'absent' => $absentNames,
         'excused' => $excusedNames,
@@ -96,7 +97,7 @@ include __DIR__ . '/../includes/header.php';
     <tr><td style="width:160px;"><strong>Session</strong></td><td><?= htmlspecialchars($currentSession['title'], ENT_QUOTES) ?> (<?= htmlspecialchars($currentSession['type'], ENT_QUOTES) ?>)</td></tr>
     <tr><td><strong>Date / Time</strong></td><td><?= htmlspecialchars($currentSession['date'], ENT_QUOTES) ?> &middot; <?= htmlspecialchars($currentSession['time'], ENT_QUOTES) ?></td></tr>
     <tr><td><strong>Venue</strong></td><td><?= htmlspecialchars($currentSession['venue'], ENT_QUOTES) ?></td></tr>
-    <tr><td><strong>Minutes Generated</strong></td><td><?= htmlspecialchars($latest['generated_at'], ENT_QUOTES) ?></td></tr>
+    <tr><td><strong>Minutes Generated</strong></td><td><?= htmlspecialchars($latest['generated_at'], ENT_QUOTES) ?><?= !empty($latest['generated_by']) ? ' by ' . htmlspecialchars($latest['generated_by'], ENT_QUOTES) : '' ?></td></tr>
   </table>
 
   <h3 style="font-family:'Fraunces',serif;color:var(--navy-950);">I. Attendance</h3>

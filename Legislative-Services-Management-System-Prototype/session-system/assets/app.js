@@ -73,10 +73,21 @@ function ssmsPollLive(sessionId, targetSelector, intervalMs) {
         var badge = document.getElementById('ssms-live-badge');
         if (badge) {
           badge.textContent = data.status === 'Ongoing' ? 'Live' : data.status;
+          // If the secretary marks the session Completed/Cancelled while
+          // someone still has this page open, stop the pulsing green dot
+          // too — leaving it animating next to the word "Completed" would
+          // read as a contradiction, not just a stale label.
+          var wrap = document.getElementById('ssms-live-badge-wrap');
+          if (wrap) wrap.style.opacity = data.status === 'Ongoing' ? '1' : '0.6';
+          var dot = wrap ? wrap.querySelector('.pulse-dot') : null;
+          if (dot) dot.style.animationPlayState = data.status === 'Ongoing' ? 'running' : 'paused';
         }
         var quorumEl = document.getElementById('ssms-live-quorum');
         if (quorumEl) {
-          quorumEl.textContent = data.present + ' / ' + data.total + ' present';
+          // Match the server-rendered format exactly ("3 / 8", no suffix)
+          // so the text doesn't visibly change shape the moment the first
+          // poll lands a few seconds after page load.
+          quorumEl.textContent = data.present + ' / ' + data.total;
         }
       })
       .catch(function () { /* silent — demo polling */ });
