@@ -30,6 +30,23 @@ if (isset($_POST['action']) && $_POST['action'] === 'add_log' && $canLogProceedi
     }
 }
 
+// Editing an existing entry — gated by the same rule as adding one (can't
+// touch the record of a meeting that hasn't started/never happened), and
+// staff-only like everything else on this page. Unlike a silent
+// overwrite, this keeps who wrote the ORIGINAL entry untouched and adds
+// a separate edited_by/edited_at pair, so the log entry itself shows it
+// was corrected rather than pretending it was always written that way.
+if (isset($_POST['action']) && $_POST['action'] === 'edit_log' && $canLogProceedings && isset($_POST['id'])) {
+    $note = trim($_POST['note'] ?? '');
+    if ($note !== '') {
+        ssms_update('proceedings', (int)$_POST['id'], [
+            'note' => $note,
+            'edited_by' => $_SESSION['ssms_name'] ?? "Secretary's Office",
+            'edited_at' => date('Y-m-d H:i'),
+        ]);
+    }
+}
+
 if (isset($_POST['action']) && $_POST['action'] === 'delete') {
     ssms_delete('proceedings', (int)$_POST['id']);
 }
@@ -131,9 +148,26 @@ include __DIR__ . '/../includes/header.php';
       <div class="dot"></div>
       <div class="body">
         <div class="meta"><?= htmlspecialchars($l['timestamp'], ENT_QUOTES) ?> &middot; <?= htmlspecialchars($l['author'], ENT_QUOTES) ?>
-          <form method="POST" style="display:inline;float:right;" onsubmit="return confirm('Delete this entry?');"><?php ssms_csrf_field(); ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $l['id'] ?>"><input type="hidden" name="session_id" value="<?= $selectedId ?>"><button class="btn btn-ghost btn-sm" style="padding:2px 7px;"><i class="fa-solid fa-xmark"></i></button></form>
+          <?php if (!empty($l['edited_at'])): ?>
+            <span title="Edited by <?= htmlspecialchars($l['edited_by'] ?? 'someone', ENT_QUOTES) ?> on <?= htmlspecialchars($l['edited_at'], ENT_QUOTES) ?>" style="color:var(--ink-600);font-style:italic;">(edited)</span>
+          <?php endif; ?>
+          <?php if ($canLogProceedings): ?>
+          <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 7px;float:right;margin-left:4px;" onclick="ssmsToggleEditLog(<?= $l['id'] ?>)" title="Edit entry"><i class="fa-solid fa-pen"></i></button>
+          <form method="POST" style="display:inline;float:right;" onsubmit="return confirm('Delete this entry?');"><?php ssms_csrf_field(); ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $l['id'] ?>"><input type="hidden" name="session_id" value="<?= $selectedId ?>"><button class="btn btn-ghost btn-sm" style="padding:2px 7px;" title="Delete entry"><i class="fa-solid fa-xmark"></i></button></form>
+          <?php endif; ?>
         </div>
-        <div class="txt"><?= nl2br(htmlspecialchars($l['note'], ENT_QUOTES)) ?></div>
+        <div class="txt" id="log-txt-<?= $l['id'] ?>"><?= nl2br(htmlspecialchars($l['note'], ENT_QUOTES)) ?></div>
+        <?php if ($canLogProceedings): ?>
+        <form method="POST" id="log-edit-form-<?= $l['id'] ?>" style="display:none;margin-top:8px;">
+          <?php ssms_csrf_field(); ?>
+          <input type="hidden" name="action" value="edit_log">
+          <input type="hidden" name="id" value="<?= $l['id'] ?>">
+          <input type="hidden" name="session_id" value="<?= $selectedId ?>">
+          <textarea name="note" rows="2" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-family:inherit;margin-bottom:6px;"><?= htmlspecialchars($l['note'], ENT_QUOTES) ?></textarea>
+          <button type="submit" class="btn btn-navy btn-sm"><i class="fa-solid fa-check"></i> Save</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="ssmsToggleEditLog(<?= $l['id'] ?>)">Cancel</button>
+        </form>
+        <?php endif; ?>
       </div>
     </div>
     <?php endforeach; ?>
@@ -146,6 +180,16 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <script>
+// Shows the inline edit form for one log entry, hiding its static text
+// while editing; Cancel (calling this again) flips it back.
+function ssmsToggleEditLog(id) {
+  const txt = document.getElementById('log-txt-' + id);
+  const form = document.getElementById('log-edit-form-' + id);
+  const editing = form.style.display === 'block';
+  form.style.display = editing ? 'none' : 'block';
+  txt.style.display = editing ? 'block' : 'none';
+}
+
 // --- Input method toggle ---------------------------------------------------
 function ssmsSetInputMethod() {
   const voiceChosen = document.getElementById('input-method-voice').checked;
