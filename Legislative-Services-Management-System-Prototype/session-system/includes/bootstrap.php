@@ -5,6 +5,15 @@
 // api/qr_login.php, includes/auth.php) requires this instead of calling
 // session_start() directly.
 
+// Every timestamp anywhere in this system — attendance time-ins, session
+// created_at, minutes generated_at, login_audit entries, the AFK lockout
+// countdown — comes from PHP's date()/time() functions. Without this,
+// PHP defaults to UTC (confirmed on this server), which is 8 hours
+// behind actual Philippine time. Setting this here, before anything else
+// in the whole app runs, fixes every timestamp everywhere in one place
+// rather than needing to touch every individual date()/time() call.
+date_default_timezone_set('Asia/Manila');
+
 // Never show raw PHP errors/stack traces to whoever's looking at the
 // page — a database hiccup or bad config shouldn't leak file paths or
 // query fragments to a visitor. Still log errors server-side if the

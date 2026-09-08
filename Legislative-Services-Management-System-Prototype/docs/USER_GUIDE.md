@@ -1,78 +1,104 @@
-# User Guide — Legislative Services Management System Prototype
+# User Guide — Legislative Services Management System
 
-This guide walks you through using the LSMS prototype. The application is fully interactive and persists all changes in your browser via Local Storage.
+This guide covers how to actually use the system, for both staff and council members.
 
-## Getting Started
+## Logging In
 
-1. Open the project folder in VS Code, right-click `index.html`, and choose **"Open with Live Server"** to view the landing page — Alternatively, serve the folder with any static HTTP server. Click **Login** to open `app.html`, the application itself.
-2. On first load, the app displays a brief loading screen while it seeds the sample legislative dataset, then lands on the **Executive Dashboard**.
-3. Use the left sidebar to navigate between modules. The dashboard is your home base and updates live as you interact with other modules.
+### If you're staff (Secretary or Admin)
 
-## Navigation
+Go to `login.php`, enter your username and password. A few things to know:
 
-- **Sidebar** — all 10 legislative modules plus Reports, Settings, Help, and About, grouped under "System."
-- **Breadcrumb** — top center, shows your current location (Home › Page).
-- **Global search** — top bar; searches ordinances, resolutions, sessions, committees, members, documents, archives, research, hearings, and feedback. Press `/` to focus it, `Enter` to jump to the first result.
-- **Notifications** — the bell icon opens a panel of recent system notifications with a "Mark all read" action.
-- **Dark mode** — the moon/sun icon toggles a dark theme; your preference is saved.
+- **5 wrong attempts locks you out for 10 minutes** — the countdown shown is accurate even if you reload the page, since it's tracked server-side, not just in your browser.
+- **After 15 minutes of inactivity**, a "Still there?" warning pops up with a 5-minute countdown. Click **Stay signed in** to continue, or you'll be automatically logged out at the 20-minute mark.
+- If you forgot your password, ask another Admin to reset it for you from **Account Settings** — no email/SMS reset exists, so this is the only recovery path. If there's only one staff account in the whole system and that person is locked out, recovery requires direct database access.
 
-## Module Workflows
+### If you're a council member
 
-### Creating an Ordinance
-1. Go to **Ordinances**.
-2. Click **New Ordinance**.
-3. The measure number is auto-suggested. Fill in the title (required), author, category, committee, status, and summary.
-4. Click **Save as Draft**. The ordinance is created, an AI summary is auto-generated, the table updates, and the dashboard's pending count increases live.
+Go to `qr_login.php` on your own phone and scan your personal QR badge (printed, or shown on someone else's screen — not your own phone's screen, since you can't scan your own device). A few things to know:
 
-### Advancing a Measure Through the Lifecycle
-1. On the Ordinances page, switch to the **Lifecycle Workflow** tab to see the six-stage pipeline.
-2. In the table, use the **advance** action (where available) to move a measure from one stage to the next (Drafting → Committee Review → Pending Review → Approved → Published → Enacted).
+- **You must be physically at the configured location** — your phone's real GPS location is checked against the office coordinates every single time you log in, not just the first time.
+- **The first device that scans your badge is permanently bound to it.** If you get a new phone, ask the Secretary's Office to reset your device binding in Manage Devices.
+- **If a session is currently Ongoing when you scan**, you're automatically marked Present — no separate check-in step needed.
 
-### Running a Live Session
-1. Go to **Sessions** → **Live Session** tab.
-2. Use the timer controls (Start / Pause / End) to simulate a live session.
-3. View quorum status, attendance breakdown, and the AI session brief.
-4. Switch to **Minutes** to see auto-generated minutes from the session metadata.
+---
 
-### Recording a Vote
-1. Go to **Voting** → click **New Vote**.
-2. Enter a subject, select a session, and choose a voting type.
-3. For each council member, click **Yes**, **No**, or **Abstain** (or use the quick-vote-all buttons).
-4. Click **Record Vote**. The tally, outcome (Passed / Unanimous / Failed), and charts update immediately.
+## For Staff: Running a Session
 
-### Managing the Calendar
-1. Go to **Agenda** to see the monthly legislative calendar.
-2. Use the month navigation arrows to move between months.
-3. Events (sessions, hearings, deadlines) appear as colored chips on their dates.
-4. The **Upcoming Deadlines** panel lists priorities with countdowns.
+### 1. Schedule the session
 
-### Responding to Citizen Feedback
-1. Go to **Citizen Engagement**.
-2. Use the tabs to filter by Inbox, Complaints, or Suggestions.
-3. Click the view icon on a feedback item to open the detail and **Respond**.
-4. Use **Validate** to mark feedback as validated.
-5. Click **Public Portal** to see a simulation of the citizen-facing portal.
+Go to **Session Scheduling** → fill in title, type, date, time, venue → **Schedule**. It starts as "Scheduled."
 
-### Archiving and Restoring Records
-1. Go to **Archives** to browse the historical repository.
-2. Use search and category/format filters to narrow results.
-3. Click the restore icon on an archive item to simulate digital restoration.
+### 2. Start the session
 
-### Resetting the Data
-1. Go to **Settings** → **Data Management**.
-2. Click **Export All Data (JSON)** to download a backup.
-3. Click **Reset to Sample Data** to restore the original seeded dataset.
+When it's actually time to begin, change its status to **Ongoing**. This matters — several things are locked until the session is Ongoing:
 
-## Keyboard Shortcuts
+- You can't mark attendance for a session that's still "Scheduled."
+- You can't log proceedings for a session that's still "Scheduled."
+- You can't generate minutes for a session that's still "Scheduled."
 
-| Key | Action |
-|---|---|
-| `/` | Focus the global search |
-| `Esc` | Close search results, notifications, or any open modal |
+This is intentional — it stops the system from recording things (who attended, what was said, official minutes) for a meeting that technically hasn't happened yet.
+
+### 3. Build the agenda
+
+Go to **Agenda Preparation**, add items, and track their status (Pending → Discussed → Approved/Deferred) as the session moves along.
+
+### 4. Track attendance
+
+Go to **Attendance & Quorum**. Mark each council member Present/Excused/Absent by hand, or let council members self-check-in by scanning their own QR badge (this happens automatically the moment they log in, if the session is Ongoing).
+
+### 5. Log proceedings as things happen
+
+Go to **Proceedings Documentation**. You have two ways to add an entry:
+
+- **Type manually** — just type into the note field.
+- **Voice dictation** — pick your spoken language (English, Tagalog/Filipino, or the approximate Taglish option — see note below), optionally pick a specific microphone if your device has more than one, click **Record**, and speak. It transcribes live as you talk. Click **Stop & Transcribe** when done, review the text, then submit.
+
+> **A note on Taglish**: no browser actually has a dedicated "Taglish" speech recognition mode — that's not a real, distinct engine that exists anywhere. The Taglish option in the dropdown uses the Filipino recognition engine underneath, which tends to handle common English words mixed into Tagalog speech reasonably well, but it's an approximation, not a perfect dedicated mode.
+
+> **A note on microphone selection**: the browser's speech recognition engine doesn't have an official way to be told "use this specific microphone" — it normally just uses whatever your system's default input is. The microphone dropdown here uses a common workaround that works on current Chrome/Edge, but it isn't a guaranteed, official browser feature.
+
+### 6. Generate minutes
+
+Once the session is Ongoing or Completed, go to **Minutes Generation**, pick the session, and click **Generate Minutes**. It automatically pulls in attendance, agenda, and proceedings — you don't retype anything. The document shows who generated it and when.
+
+### 7. Complete and archive
+
+Mark the session **Completed** (or **Cancelled** if it didn't happen), then archive it from Session Scheduling. Archived sessions move to **Session Archive**, where you can view the full official record or export it as JSON.
+
+---
+
+## For Staff: Account Management
+
+Go to **Account Settings**.
+
+- **Change your own password** — anyone can do this, requires your current password.
+- **Admin only**: add new staff accounts (choosing Secretary or Admin role), remove accounts, promote/demote roles, and reset a locked-out colleague's password (generates a one-time temporary password shown once on screen — give it to them directly).
+- **The system always keeps at least one Admin** — you can't demote or remove the last remaining Admin account, so the system can never end up with nobody able to manage staff accounts.
+
+---
+
+## For Staff: Managing Council Members & QR Badges
+
+- **Council Members**: add, edit, or remove council members from the roster.
+- **Manage QR Badges & Devices**:
+  - **Generate a badge** for a member, then either print it, display it on your own screen for them to scan, or hand it over some other way — just not by sending the image to the same phone they'll scan with.
+  - **Reset Device** if a member gets a new phone — the same physical badge still works, the next scan binds the new device.
+  - **Regenerate Token** if a phone was **stolen** — this invalidates the old badge entirely (not just the device binding), which matters if the badge image was ever sent digitally and might still exist on the stolen phone.
+
+---
+
+## For the Public
+
+No login needed — go to the public dashboard URL. You'll see the currently featured session's status, agenda, and live quorum count, refreshing automatically. Nothing sensitive (council member names, proceedings text, minutes) is shown here — only what's already meant to be public.
+
+---
 
 ## Troubleshooting
 
-- **Blank page / stuck loading** — ensure you're accessing the app via an HTTP server (Live Server, `python3 -m http.server`, etc.), not by double-clicking the HTML file. ES6 modules require an HTTP origin.
-- **Charts not showing** — hard-refresh the page; Chart.js is loaded from a CDN and needs internet access on first load.
-- **Data looks wrong** — go to Settings → Reset to Sample Data to restore the original dataset.
-- **Changes not persisting** — make sure your browser allows Local Storage for the origin (private/incognito modes may restrict it).
+- **"Too many failed attempts" on staff login** — wait out the 10-minute lockout, or ask an Admin to check if you have the right username.
+- **QR scan fails with a location error** — you're not within the allowed distance of the configured office location. This is checked every time, not just once.
+- **QR scan says "already registered to another device"** — that badge is bound to a different phone. Ask the Secretary's Office to Reset Device or Regenerate Token in Manage Devices.
+- **Can't mark attendance / log proceedings / generate minutes** — check the session's status in Session Scheduling. It must be "Ongoing" or "Completed" — these actions are blocked for "Scheduled" or "Cancelled" sessions on purpose.
+- **Voice dictation doesn't respond** — make sure you're using Chrome or Edge, that you allowed microphone access when prompted, and that you have an internet connection (the browser's speech engine needs one).
+- **Signed out unexpectedly** — if you were inactive for 20 minutes, this is the AFK auto-logout working as intended. Just log back in.
+- **Dark mode text looks wrong somewhere** — Minutes and Archive documents are deliberately kept in a fixed light "paper" appearance regardless of your theme setting, since official documents shouldn't visually change based on personal preference.

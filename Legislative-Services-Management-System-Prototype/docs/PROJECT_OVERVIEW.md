@@ -1,48 +1,44 @@
-# Project Overview — Legislative Services Management System Prototype
+# Project Overview — Legislative Services Management System
 
 ## Purpose
 
-The Legislative Services Management System (LSMS) prototype is a front-end demonstration of a unified digital platform for managing the complete lifecycle of local government legislative operations. It was developed as a Capstone Proposal artifact to illustrate how ten interconnected legislative systems could be brought together in a single, modern, user-friendly interface.
+The Legislative Services Management System (LSMS) is a working PHP + MySQL application built for the Sangguniang Panlungsod ng San Jose del Monte's Secretary's Office, to digitize the day-to-day management of council sessions: scheduling, agenda preparation, attendance and quorum tracking, live session tracking, proceedings documentation, and official minutes generation.
 
 ## Objectives
 
-1. **Demonstrate end-to-end legislative workflow** — from ordinance drafting and committee review through session management, voting, public consultation, archiving, and citizen engagement.
-2. **Showcase information architecture** — how data relationships (ordinances ↔ committees ↔ members ↔ sessions ↔ votes) can be represented and navigated without a database.
-3. **Communicate a product vision** — a polished, interactive, and immediately explorable interface that stakeholders can click through to understand the proposed platform.
-4. **Validate the module decomposition** — confirm that the ten identified systems (from the reference specification) are individually meaningful and collectively coherent.
-5. **Prove feasibility with a lightweight stack** — that a rich, multi-module application can be built and run with HTML, Tailwind CSS, and vanilla JavaScript ES6 modules, with no backend or build step.
+1. **Replace manual, paper-based session tracking** with a real system that keeps sessions, agendas, attendance, proceedings, and minutes consistently linked to each other, instead of separate documents that can drift out of sync.
+2. **Make attendance verifiable and low-friction** for council members via a personal QR badge, without requiring expensive hardware like biometric scanners or RFID infrastructure.
+3. **Give the public a live, safe window** into what's happening in an ongoing session — status, agenda, and quorum — without exposing anything sensitive, and without requiring a login.
+4. **Auto-generate official minutes** from data that's already been entered once (attendance, agenda, proceedings), rather than requiring the secretary to retype everything into a separate document by hand.
+5. **Keep the system practical and maintainable** for a real LGU office — plain PHP and MySQL, no framework, no unnecessary infrastructure, deployable on ordinary shared/PaaS hosting via Docker.
 
 ## Scope
 
-The prototype covers ten core modules, each with create, read, update, delete, search, filter, print, and export capabilities, backed by Local Storage persistence and a live-updating dashboard:
+The system covers the full lifecycle of a legislative session:
 
-1. Ordinance & Resolution Lifecycle Management
-2. Session & Legislative Meeting Management
-3. Legislative Agenda & Calendar Management
-4. Committee Management & Assignment System
-5. Voting, Quorum & Decision Support System
-6. Legislative Records & Document Management
-7. Public Hearing & Consultation Management
-8. Legislative Archives & Historical Repository
-9. Legislative Research, Policy Analysis & Impact Evaluation
-10. Citizen Engagement & Public Feedback Management
-
-Supplementary pages — Reports, Settings, Help, and About — round out the application.
+1. **Session Scheduling** — create, schedule, and manage the status of sessions (Scheduled → Ongoing → Completed/Cancelled → Archived).
+2. **Agenda Preparation** — build and order the agenda for a session, track each item's disposition.
+3. **Attendance & Quorum Monitoring** — mark attendance by hand (staff) or automatically via QR badge scan (council members), with live quorum calculation.
+4. **Real-Time Session Tracking** — a live dashboard of the current agenda item, session timer, and quorum, for staff use during a live session.
+5. **Proceedings Documentation** — a running log of what happens during the session, typed or voice-dictated.
+6. **Minutes Generation** — automatically compiles attendance, agenda, and proceedings into one official, printable document.
+7. **Session Archive** — historical record of completed/cancelled sessions, with full official records and JSON export/import.
+8. **Council Member & Staff Account Management** — roster management, staff accounts with Admin/Secretary roles, and QR badge issuance/management.
 
 ## Out of Scope (by design)
 
-- No backend, server, or database.
-- No authentication or user accounts.
-- No real AI/ML — insight blocks are simulated contextual text.
-- No real electronic voting or civic process integration.
-- No production build tooling — Tailwind and Chart.js are loaded via CDN.
+- **No biometric or RFID hardware** — QR badge + location verification was chosen specifically to stay practical and inexpensive for an LGU office.
+- **No AI-generated content.** The one AI-adjacent feature (voice-to-text dictation in Proceedings) is the browser's own built-in speech recognition — nothing is auto-written, summarized, or generated by a language model. "Minutes Generation" compiles already-entered data into a document; it does not write or paraphrase anything on its own.
+- **No microservices, message queues, or distributed infrastructure** — this is a single PHP application backed by one MySQL database, which is all a system of this scope actually needs.
+- **No enterprise-grade identity provider (SSO/OAuth/LDAP)** — plain username/password for staff and QR-badge login for council members is proportionate to the number of users this system actually serves.
 
 ## Target Audience
 
-- Capstone evaluators and advisors reviewing the proposal.
-- Local government stakeholders exploring a digital legislative platform concept.
-- Developers and designers interested in a vanilla-JS SPA reference architecture.
+- The Secretary's Office and administrative staff of the Sangguniang Panlungsod, who use this system daily to run sessions.
+- Council members, who use it briefly each session to check in via QR badge.
+- The general public, via the read-only public dashboard, to see what's happening in an ongoing session without needing an account.
+- Capstone evaluators and panelists reviewing the system's design, security, and completeness.
 
 ## Deliverable
 
-A single ZIP package containing the complete, self-contained, immediately runnable application plus documentation. No installation, configuration, or internet dependency beyond the initial CDN load is required.
+A deployable PHP + MySQL web application (via Docker), plus this documentation, intended to be run continuously by the Secretary's Office rather than viewed as a one-time demo.

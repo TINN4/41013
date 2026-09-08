@@ -12,8 +12,13 @@ if (!$selectedId && $sessions) {
     $selectedId = $ongoing ? $ongoing[0]['id'] : $sessions[0]['id'];
 }
 $selectedId = (int)$selectedId;
+$currentSession = ssms_find('sessions', $selectedId);
+// Same principle as Minutes Generation and Attendance: can't log what
+// happened in a meeting that's still "Scheduled" (hasn't started) or was
+// "Cancelled" (never happened).
+$canLogProceedings = $currentSession && in_array($currentSession['status'], ['Ongoing', 'Completed'], true);
 
-if (isset($_POST['action']) && $_POST['action'] === 'add_log') {
+if (isset($_POST['action']) && $_POST['action'] === 'add_log' && $canLogProceedings) {
     $note = trim($_POST['note'] ?? '');
     if ($note !== '') {
         ssms_insert('proceedings', [
@@ -31,7 +36,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete') {
 
 $logs = ssms_where('proceedings', 'session_id', $selectedId);
 usort($logs, fn($a, $b) => strcmp($b['timestamp'], $a['timestamp']));
-$currentSession = ssms_find('sessions', $selectedId);
 
 $page_title = 'Proceedings Documentation';
 $page_sub   = 'Log what happens during the session as it happens';
@@ -58,6 +62,13 @@ include __DIR__ . '/../includes/header.php';
 
 <?php if (!$currentSession): ?>
   <div class="empty-state"><i class="fa-solid fa-calendar-xmark"></i>No sessions available. Create one in Session Scheduling first.</div>
+<?php elseif (!$canLogProceedings): ?>
+  <div class="card">
+    <div class="empty-state">
+      <i class="fa-solid fa-circle-info"></i>
+      Proceedings can only be logged once this session has started. It's currently "<?= htmlspecialchars($currentSession['status'], ENT_QUOTES) ?>" &mdash; start it from Session Scheduling first.
+    </div>
+  </div>
 <?php else: ?>
 
 <div class="card">
@@ -83,11 +94,18 @@ include __DIR__ . '/../includes/header.php';
       <select id="rec-lang-select" style="flex:1;min-width:220px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);font-size:12.5px;background:#fff;">
         <option value="en-US">English</option>
         <option value="fil-PH">Tagalog / Filipino</option>
+        <option value="fil-PH-taglish" title="No browser has a real Taglish mode — this uses the Filipino engine, which tends to handle common mixed-in English words reasonably.">Taglish (approximate)</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <label for="rec-mic-select" style="font-size:12px;font-weight:600;color:var(--ink-600);white-space:nowrap;"><i class="fa-solid fa-microphone-lines"></i> Microphone:</label>
+      <select id="rec-mic-select" style="flex:1;min-width:220px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);font-size:12.5px;background:#fff;">
+        <option value="">Default microphone</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <button type="button" id="rec-btn" class="btn btn-gold btn-sm" onclick="ssmsToggleRecording()"><i class="fa-solid fa-microphone"></i> Record &amp; Transcribe</button>
-      <span id="rec-status" style="font-size:12.5px;color:var(--ink-600);">Pick your spoken language above, click Record, then allow microphone access when your browser asks.</span>
+      <span id="rec-status" style="font-size:12.5px;color:var(--ink-600);">Pick your spoken language and microphone above, click Record, then allow microphone access when your browser asks.</span>
     </div>
   </div>
 
@@ -138,6 +156,13 @@ function ssmsSetInputMethod() {
   if (!voiceChosen && ssmsRecording) {
     ssmsStopRecordingUI();
   }
+  // Works immediately if this site already has mic permission from a
+  // past visit (labels only show up once permission has been granted at
+  // least once) — if not, the list just stays "Default microphone" until
+  // the first Record click, same as before.
+  if (voiceChosen) {
+    ssmsPopulateMicList();
+  }
 }
 
 // --- Speech-to-text using the browser's built-in engine -------------------
@@ -186,22 +211,62 @@ function ssmsStartRecording() {
   // clear, specific error message instead of a silent failure if the mic is
   // blocked, missing, or already in use by another app/tab.
   status.textContent = 'Requesting microphone access…';
-  navigator.mediaDevices.getUserMedia({ audio: true })
+  const micSelect = document.getElementById('rec-mic-select');
+  const chosenDeviceId = micSelect ? micSelect.value : '';
+  const constraints = chosenDeviceId ? { audio: { deviceId: { exact: chosenDeviceId } } } : { audio: true };
+
+  navigator.mediaDevices.getUserMedia(constraints)
     .then((stream) => {
-      stream.getTracks().forEach(track => track.stop()); // we only needed the permission prompt, not this stream — SpeechRecognition opens its own
+      // Device labels are blank/generic until permission is granted, so
+      // populate the dropdown NOW, the first time we actually have
+      // access — repeat calls are harmless, enumerateDevices() is cheap.
+      ssmsPopulateMicList();
+      if (chosenDeviceId) {
+        // Keeping this specific stream open (rather than stopping it like
+        // the default-device case below) is the common workaround for
+        // steering which physical microphone SpeechRecognition actually
+        // uses — current Chrome/Edge tend to pick up whichever input is
+        // already active in the tab. This is observed behavior, not an
+        // official guarantee from the Web Speech API spec, so it may not
+        // hold on every browser version.
+        ssmsActiveMicStream = stream;
+      } else {
+        stream.getTracks().forEach(track => track.stop()); // default mic — SpeechRecognition opens its own, we only needed the permission prompt
+      }
       ssmsBeginRecognition();
     })
     .catch((err) => {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         status.textContent = 'Microphone access was blocked. Click the padlock icon in your address bar, allow the microphone, then try again.';
-      } else if (err.name === 'NotFoundError') {
-        status.textContent = 'No microphone was found on this device.';
+      } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+        status.textContent = 'That microphone is no longer available. Try picking a different one, or "Default microphone".';
       } else if (err.name === 'NotReadableError') {
         status.textContent = 'The microphone is already in use by another app or browser tab.';
       } else {
         status.textContent = 'Could not access the microphone (' + err.name + '). Please try again, or switch to "Type manually" above.';
       }
     });
+}
+
+let ssmsActiveMicStream = null; // holds the live stream when a specific (non-default) mic was chosen, so we can stop it once recording ends
+
+function ssmsPopulateMicList() {
+  const micSelect = document.getElementById('rec-mic-select');
+  if (!micSelect) return;
+  const previouslySelected = micSelect.value;
+  navigator.mediaDevices.enumerateDevices().then((devices) => {
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    micSelect.innerHTML = '<option value="">Default microphone</option>';
+    mics.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value = d.deviceId;
+      opt.textContent = d.label || ('Microphone ' + (i + 1));
+      micSelect.appendChild(opt);
+    });
+    if (previouslySelected && mics.some(d => d.deviceId === previouslySelected)) {
+      micSelect.value = previouslySelected; // keep whatever the person already had picked, if it's still plugged in
+    }
+  }).catch(() => { /* enumeration failing just leaves "Default microphone" as the only option, which still works */ });
 }
 
 function ssmsBeginRecognition() {
@@ -217,7 +282,11 @@ function ssmsBeginRecognition() {
   ssmsIntentionalStop = false;
 
   ssmsRecognition = new SpeechRecognitionCtor();
-  ssmsRecognition.lang = langSelect.value;
+  // "fil-PH-taglish" is a label we made up for the dropdown, not a real
+  // browser locale — no speech engine actually has a dedicated Taglish
+  // mode, so this maps down to Filipino, which handles common
+  // code-switched English words reasonably even if not perfectly.
+  ssmsRecognition.lang = langSelect.value === 'fil-PH-taglish' ? 'fil-PH' : langSelect.value;
   ssmsRecognition.continuous = true;
   ssmsRecognition.interimResults = true;
 
@@ -285,6 +354,8 @@ function ssmsBeginRecognition() {
     btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop &amp; Transcribe';
     btn.classList.add('btn-danger');
     langSelect.disabled = true;
+    const micSelect = document.getElementById('rec-mic-select');
+    if (micSelect) micSelect.disabled = true;
     status.textContent = 'Listening — speak now. Click "Stop & Transcribe" when done.';
   } catch (err) {
     status.textContent = 'Could not start recording. Please try again.';
@@ -296,12 +367,18 @@ function ssmsStopRecordingUI() {
   if (ssmsRecognition) {
     try { ssmsRecognition.stop(); } catch (err) { /* already stopped, ignore */ }
   }
+  if (ssmsActiveMicStream) {
+    ssmsActiveMicStream.getTracks().forEach(track => track.stop());
+    ssmsActiveMicStream = null;
+  }
   const btn = document.getElementById('rec-btn');
   const status = document.getElementById('rec-status');
   const langSelect = document.getElementById('rec-lang-select');
+  const micSelect = document.getElementById('rec-mic-select');
   btn.innerHTML = '<i class="fa-solid fa-microphone"></i> Record &amp; Transcribe';
   btn.classList.remove('btn-danger');
   langSelect.disabled = false;
+  if (micSelect) micSelect.disabled = false;
   if (status.textContent.indexOf('error') === -1 && status.textContent.indexOf('blocked') === -1) {
     status.textContent = 'Transcribed live in your browser. Review the text below, then click Add Entry.';
   }

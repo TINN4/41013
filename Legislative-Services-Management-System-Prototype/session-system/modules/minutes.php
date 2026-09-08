@@ -14,7 +14,17 @@ $selectedId = (int)$selectedId;
 $currentSession = ssms_find('sessions', $selectedId);
 
 $generated = null;
+$genBlockedReason = null;
 if (isset($_POST['action']) && $_POST['action'] === 'generate' && $currentSession) {
+    // A session existing in the database isn't the same as it having
+    // actually happened — "Scheduled" means it hasn't started yet, and
+    // generating official minutes for a meeting that never took place
+    // (or was called off) would create a fake record. Only sessions that
+    // are at least Ongoing (currently happening) or Completed (already
+    // finished) may have minutes generated for them.
+    if (!in_array($currentSession['status'], ['Ongoing', 'Completed'], true)) {
+        $genBlockedReason = 'Minutes can only be generated once a session has started. This session is still "' . $currentSession['status'] . '" — start it from Session Scheduling first.';
+    } else {
     $members = ssms_read('members');
     $attendance = ssms_where('attendance', 'session_id', $selectedId);
     $agenda = ssms_where('agenda', 'session_id', $selectedId);
@@ -43,6 +53,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'generate' && $currentSessio
         'log' => $logs,
     ]);
     $generated = ssms_find('minutes', $id);
+    }
 }
 
 // Show most recent generated minutes for this session if any
@@ -55,6 +66,8 @@ $page_sub   = 'Auto-compile agenda, attendance & proceedings into official minut
 $active_page = 'minutes';
 include __DIR__ . '/../includes/header.php';
 ?>
+
+<?php if ($genBlockedReason): ?><div class="alert alert-warn no-print"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($genBlockedReason, ENT_QUOTES) ?></div><?php endif; ?>
 
 <div class="card no-print">
   <div class="select-session-bar">
@@ -70,11 +83,11 @@ include __DIR__ . '/../includes/header.php';
         </select>
       </form>
     </div>
-    <?php if ($currentSession): ?>
+    <?php if ($currentSession): $canGenerate = in_array($currentSession['status'], ['Ongoing', 'Completed'], true); ?>
     <form method="POST"><?php ssms_csrf_field(); ?>
       <input type="hidden" name="action" value="generate">
       <input type="hidden" name="session_id" value="<?= $selectedId ?>">
-      <button type="submit" class="btn btn-navy"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Minutes</button>
+      <button type="submit" class="btn btn-navy" <?= $canGenerate ? '' : 'disabled title="This session hasn\'t started yet — start it from Session Scheduling first."' ?>><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Minutes</button>
     </form>
     <?php if ($latest): ?>
       <button onclick="window.print()" class="btn btn-ghost"><i class="fa-solid fa-print"></i> Print / Save PDF</button>
