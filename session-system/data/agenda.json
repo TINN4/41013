@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "session_id": 1,
+    "order": 1,
+    "item": "Call to order and roll call",
+    "presenter": "Secretary's Office",
+    "status": "Approved"
+  },
+  {
+    "id": 2,
+    "session_id": 1,
+    "order": 2,
+    "item": "Reading and approval of previous minutes",
+    "presenter": "Hon. R. Almazan",
+    "status": "Discussed"
+  },
+  {
+    "id": 3,
+    "session_id": 1,
+    "order": 3,
+    "item": "Proposed Ordinance No. 2026-014: Solid Waste Management Program",
+    "presenter": "Hon. P. Villanueva",
+    "status": "Pending"
+  },
+  {
+    "id": 4,
+    "session_id": 1,
+    "order": 4,
+    "item": "Resolution: Endorsement of Barangay Health Worker Incentive",
+    "presenter": "Hon. M. Reyes",
+    "status": "Pending"
+  },
+  {
+    "id": 5,
+    "session_id": 1,
+    "order": 5,
+    "item": "Privilege hour / other matters",
+    "presenter": "Open Floor",
+    "status": "Pending"
+  },
+  {
+    "id": 6,
+    "session_id": 2,
+    "order": 1,
+    "item": "Call to order and roll call",
+    "presenter": "Secretary's Office",
+    "status": "Pending"
+  },
+  {
+    "id": 7,
+    "session_id": 2,
+    "order": 2,
+    "item": "Second reading: Proposed Ordinance No. 2026-015",
+    "presenter": "Hon. D. Santos",
+    "status": "Pending"
+  },
+  {
+    "id": 8,
+    "session_id": 3,
+    "order": 1,
+    "item": "Call to order and roll call",
+    "presenter": "Secretary's Office",
+    "status": "Approved"
+  },
+  {
+    "id": 9,
+    "session_id": 3,
+    "order": 2,
+    "item": "Approval of Resolution No. 2026-041",
+    "presenter": "Hon. J. Cruz",
+    "status": "Approved"
+  },
+  {
+    "id": 10,
+    "session_id": 3,
+    "order": 3,
+    "item": "Committee reports",
+    "presenter": "Various",
+    "status": "Approved"
+  }
+]
