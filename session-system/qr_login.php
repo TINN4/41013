@@ -1,11 +1,8 @@
 <?php
-session_start();
+require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/geofence.php';
-
-if (!empty($_SESSION['ssms_user'])) {
-    header('Location: modules/scheduling.php');
-    exit();
-}
+ssms_start_session();
+if (ssms_current_user()) ssms_redirect('dashboard.php');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -19,7 +16,7 @@ if (!empty($_SESSION['ssms_user'])) {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="assets/style.css">
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="assets/vendor/html5-qrcode.min.js"></script>
 <style>
   .qr-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--navy-950); padding:24px 16px; }
   .qr-card { width:100%; max-width:440px; background:#fff; border-radius:20px; padding:32px 28px; box-shadow:0 20px 50px rgba(10,31,61,.3); }
@@ -46,7 +43,7 @@ if (!empty($_SESSION['ssms_user'])) {
   <div class="qr-card">
     <div class="lc-seal"><i class="fa-solid fa-qrcode"></i></div>
     <h2>Scan Your Badge to Log In</h2>
-    <p class="sub">This device will be permanently linked to your account on first login &mdash; and only that device will work afterward.</p>
+    <p class="sub">Your badge is linked to one device on first use, and only that device will work afterward. Accounts with two-step verification will be asked for a code next.</p>
 
     <div id="qr-reader"></div>
 
@@ -72,9 +69,10 @@ function setStep(el, state, text) {
   el.className = 'step-row ' + state;
   if (text) el.querySelector('span').textContent = text;
 }
-function showStatus(type, html) {
+function showStatus(type, text) {
   statusBox.className = 'qr-status show ' + type;
-  statusBox.innerHTML = html;
+  statusBox.setAttribute('role', 'alert');
+  statusBox.textContent = text;          // textContent: server text can never inject markup
 }
 
 // Persistent per-device identifier (survives reloads, tied to this browser/device).
@@ -93,10 +91,10 @@ let scanLocked = false;
 function initGeo() {
   if (!navigator.geolocation) {
     setStep(stepGeo, 'failed', 'Geolocation not supported by this browser.');
-    showStatus('err', '<i class="fa-solid fa-circle-exclamation"></i> Your browser does not support location access, which is required for QR login.');
+    showStatus('err', 'Your browser does not support location access, which is required for QR login.');
     return;
   }
-  setStep(stepGeo, 'active', 'Requesting location permission&hellip;');
+  setStep(stepGeo, 'active', 'Requesting location permission…');
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -106,7 +104,7 @@ function initGeo() {
     },
     (err) => {
       setStep(stepGeo, 'failed', 'Location permission denied or unavailable.');
-      showStatus('err', '<i class="fa-solid fa-circle-exclamation"></i> Location access is required to verify you are on office premises. Please allow location access and reload this page.');
+      showStatus('err', 'Location access is required to verify you are on office premises. Please allow location access and reload this page.');
     },
     { enableHighAccuracy: true, timeout: 15000 }
   );
@@ -127,33 +125,34 @@ function initScanner() {
     () => { /* per-frame scan errors, ignore */ }
   ).catch((err) => {
     setStep(stepScan, 'failed', 'Camera access denied or unavailable.');
-    showStatus('err', '<i class="fa-solid fa-circle-exclamation"></i> Could not access the camera. Please allow camera access and reload this page.');
+    showStatus('err', 'Could not access the camera. Please allow camera access and reload this page.');
   });
 }
 
 function submitLogin(token) {
-  setStep(stepDevice, 'active', 'Verifying device binding&hellip;');
+  setStep(stepDevice, 'active', 'Verifying device binding…');
   fetch('api/qr_login.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, lat: coords.lat, lng: coords.lng, deviceId: getDeviceId(), deviceLabel: navigator.userAgent })
+    body: JSON.stringify({ token, lat: coords.lat, lng: coords.lng, deviceId: getDeviceId(), deviceSecret: localStorage.getItem('ssms_device_secret') || '', deviceLabel: navigator.userAgent })
   })
   .then(r => r.json())
   .then(data => {
     if (data.success) {
+      if (data.deviceSecret) localStorage.setItem('ssms_device_secret', data.deviceSecret);
       setStep(stepDevice, 'done', 'Device verified.');
-      showStatus('ok', '<i class="fa-solid fa-circle-check"></i> Badge verified, ' + data.name + '. Continuing to two-step verification&hellip;');
-      setTimeout(() => { window.location.href = 'mfa.php'; }, 900);
+      showStatus('ok', 'Badge accepted. Continuing\u2026');
+      setTimeout(() => { window.location.href = data.next === 'mfa.php' ? 'mfa.php' : data.next; }, 600);
     } else {
       setStep(stepDevice, 'failed', 'Login rejected.');
-      showStatus('err', '<i class="fa-solid fa-circle-exclamation"></i> ' + data.error);
+      showStatus('err', data.error || 'Login rejected.');
       scanLocked = false;
       setTimeout(() => { setStep(stepScan, 'active', 'Point your camera at your QR badge.'); initScanner(); }, 2500);
     }
   })
   .catch(() => {
     setStep(stepDevice, 'failed', 'Network error.');
-    showStatus('err', '<i class="fa-solid fa-circle-exclamation"></i> Could not reach the server. Please try again.');
+    showStatus('err', 'Could not reach the server. Please try again.');
     scanLocked = false;
   });
 }

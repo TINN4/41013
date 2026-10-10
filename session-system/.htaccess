@@ -1,0 +1,10 @@
+# Apache: never serve private folders or data/secret files, never list directories.
+Options -Indexes
+RedirectMatch 404 ^/?(.*/)?(data|config|includes|tools|tests)(/|$)
+<FilesMatch "\.(json|log|env|md|bak|sql|example)$">
+  Require all denied
+</FilesMatch>
+# Force HTTPS in production (uncomment):
+# RewriteEngine On
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

@@ -1,86 +1,83 @@
 <?php
 /**
- * Second login step: a one-time code sent by EMAIL (Gmail SMTP). No app needed.
- *
- * Flow: primary login (password or QR badge) -> ssms_begin_mfa() -> mfa.php sends a 6-digit code
- *       -> ssms_complete_login() only after the correct, unexpired, unused code is entered.
- * The code is stored only as a hash in the server-side session, expires in 5 minutes,
- * is single-use, allows 5 tries (then 5-minute lock per account), and resends are rate-limited.
+ * TOTP (RFC 6238 / HOTP RFC 4226), Base32 (RFC 4648), secret encryption and recovery codes.
+ * Uses only PHP built-ins (hash_hmac, random_bytes, libsodium); no custom cryptography.
+ * Verified against the RFC 6238 SHA-1 test vectors in tests/unit_totp.php.
  */
-require_once __DIR__ . '/store.php';
-require_once __DIR__ . '/mailer.php';
+const SSMS_B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-const MFA_MAX_ATTEMPTS = 5;
-const MFA_LOCK_SECONDS = 300;
-const MFA_PENDING_TTL  = 600;
-
-function mfa_config() { static $c; return $c ?: ($c = require __DIR__ . '/mail_config.php'); }
-function mfa_demo_mode() { return mfa_config()['smtp_pass'] === ''; }
-
-function mfa_email_for($uid) {
-    if (strpos($uid, 'qr:') === 0) { $u = ssms_find('qr_users', (int)substr($uid, 3)); $e = trim($u['email'] ?? ''); }
-    else { $e = trim(mfa_config()['admin_email']); }
-    return filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;
+function ssms_b32_encode(string $bin): string {
+    $bits = ''; foreach (str_split($bin) as $c) $bits .= str_pad(decbin(ord($c)), 8, '0', STR_PAD_LEFT);
+    $out = ''; foreach (str_split($bits, 5) as $chunk) $out .= SSMS_B32[bindec(str_pad($chunk, 5, '0'))];
+    return $out;
 }
-function mfa_mask($email) { [$u, $d] = explode('@', $email, 2); return substr($u, 0, 1) . str_repeat('*', max(2, strlen($u) - 1)) . '@' . $d; }
-
-function mfa_state() { $f = SSMS_DATA_DIR . '/mfa_state.json'; $d = file_exists($f) ? json_decode(file_get_contents($f), true) : []; return is_array($d) ? $d : []; }
-function mfa_state_put($uid, $rec) { $d = mfa_state(); $d[$uid] = $rec; file_put_contents(SSMS_DATA_DIR . '/mfa_state.json', json_encode($d), LOCK_EX); }
-function mfa_locked_for($uid) { $u = (mfa_state()[$uid]['lockedUntil'] ?? 0); return $u > time() ? $u - time() : 0; }
-function mfa_fail($uid) {
-    $r = mfa_state()[$uid] ?? []; $r['fails'] = ($r['fails'] ?? 0) + 1;
-    if ($r['fails'] >= MFA_MAX_ATTEMPTS) { $r['lockedUntil'] = time() + MFA_LOCK_SECONDS; $r['fails'] = 0; }
-    mfa_state_put($uid, $r);
+function ssms_b32_decode(string $s): string {
+    $s = strtoupper(preg_replace('/[\s=-]/', '', $s));
+    $bits = '';
+    foreach (str_split($s) as $c) { $p = strpos(SSMS_B32, $c); if ($p === false) return ''; $bits .= str_pad(decbin($p), 5, '0', STR_PAD_LEFT); }
+    $out = ''; foreach (str_split($bits, 8) as $b) if (strlen($b) === 8) $out .= chr(bindec($b));
+    return $out;
 }
-function mfa_clear_fails($uid) { mfa_state_put($uid, []); }
 
-function mfa_send_code($uid, $name) {
-    $cfg = mfa_config();
-    $email = mfa_email_for($uid);
-    if (!$email) return [false, 'No email address is on file for this account. Please contact the administrator.'];
-    $last = $_SESSION['ssms_pending']['sentAt'] ?? 0;
-    if (time() - $last < $cfg['resend_cooldown']) return [false, 'Please wait ' . ($cfg['resend_cooldown'] - (time() - $last)) . ' seconds before requesting a new code.'];
-    $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-    $body = "Hello $name,\n\nYour one-time verification code is:\n\n    $code\n\nIt expires in " . intdiv($cfg['otp_ttl'], 60)
-          . " minutes and can be used once. If you did not try to sign in, ignore this email and tell your administrator.\n\n- Session and Legislative Meeting Management System";
-    try {
-        if (mfa_demo_mode()) file_put_contents(SSMS_DATA_DIR . '/otp_outbox.log', date('Y-m-d H:i:s') . "  to=$email  code=$code\n", FILE_APPEND | LOCK_EX);
-        else ssms_smtp_send($cfg, $email, "Your SSMS verification code: $code", $body);
-    } catch (Throwable $e) {
-        error_log('SSMS OTP mail failed: ' . $e->getMessage());
-        return [false, 'We could not send the email right now. Please try again, or contact the administrator.'];
+function ssms_hotp(string $secret, int $counter, int $digits = 6): string {
+    $bin = pack('J', $counter);                                // 8-byte big-endian
+    $h = hash_hmac('sha1', $bin, $secret, true);
+    $o = ord($h[19]) & 0x0f;
+    $v = ((ord($h[$o]) & 0x7f) << 24) | (ord($h[$o + 1]) << 16) | (ord($h[$o + 2]) << 8) | ord($h[$o + 3]);
+    return str_pad((string)($v % (10 ** $digits)), $digits, '0', STR_PAD_LEFT);
+}
+function ssms_totp_at(string $secret, int $time, int $step = 30): string { return ssms_hotp($secret, intdiv($time, $step)); }
+
+/**
+ * Verify a TOTP code with +/- $window steps. Returns the matched counter (int) or null.
+ * $lastCounter implements replay prevention: a counter <= last accepted is rejected.
+ */
+function ssms_totp_verify(string $secret, string $code, int $lastCounter = 0, int $window = 1, ?int $now = null): ?int {
+    $code = preg_replace('/\s+/', '', $code);
+    if (!preg_match('/^\d{6}$/', $code)) return null;
+    $now = $now ?? time();
+    $cur = intdiv($now, 30);
+    $match = null;
+    for ($i = -$window; $i <= $window; $i++) {                  // constant-ish: always test all slots
+        $c = $cur + $i;
+        if (hash_equals(ssms_hotp($secret, $c), $code) && $c > $lastCounter) $match = $c;
     }
-    $_SESSION['ssms_pending'] += ['sentAt' => 0];
-    $_SESSION['ssms_pending']['otp'] = password_hash($code, PASSWORD_DEFAULT);
-    $_SESSION['ssms_pending']['exp'] = time() + $cfg['otp_ttl'];
-    $_SESSION['ssms_pending']['sentAt'] = time();
-    $_SESSION['ssms_pending']['email'] = $email;
-    return [true, 'A 6-digit code was sent to ' . mfa_mask($email) . '.'];
-}
-function mfa_check_code($code) {
-    $p = $_SESSION['ssms_pending'] ?? null;
-    $code = preg_replace('/\s+/', '', (string)$code);
-    if (!$p || empty($p['otp']) || time() > ($p['exp'] ?? 0)) return 'expired';
-    if (!preg_match('/^\d{6}$/', $code) || !password_verify($code, $p['otp'])) return 'bad';
-    unset($_SESSION['ssms_pending']['otp']);     // single use
-    return 'ok';
+    return $match;
 }
 
-function ssms_begin_mfa($uid, $name, $role, $label) {
-    session_regenerate_id(true);
-    unset($_SESSION['ssms_user']);
-    $_SESSION['ssms_pending'] = ['uid' => $uid, 'name' => $name, 'role' => $role, 'label' => $label, 'at' => time()];
+function ssms_totp_uri(string $b32Secret, string $account, string $issuer = 'SSMS SP San Jose del Monte'): string {
+    return 'otpauth://totp/' . rawurlencode($issuer . ':' . $account)
+         . '?secret=' . $b32Secret . '&issuer=' . rawurlencode($issuer) . '&algorithm=SHA1&digits=6&period=30';
 }
-function ssms_pending() {
-    $p = $_SESSION['ssms_pending'] ?? null;
-    if (!$p || time() - $p['at'] > MFA_PENDING_TTL) { unset($_SESSION['ssms_pending']); return null; }
-    return $p;
+
+/* ---- encryption of the TOTP secret at rest (libsodium secretbox, key from env) ---- */
+function ssms_secret_encrypt(string $plain): string {
+    $key = ssms_app_key();
+    if (!$key) throw new RuntimeException('SSMS_APP_KEY is not configured');
+    $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+    return base64_encode($nonce . sodium_crypto_secretbox($plain, $nonce, $key));
 }
-function ssms_complete_login() {
-    $p = $_SESSION['ssms_pending'];
-    session_regenerate_id(true);
-    $_SESSION['ssms_user'] = $p['uid'];
-    $_SESSION['ssms_name'] = $p['name'];
-    if ($p['role']) $_SESSION['ssms_role'] = $p['role'];
-    unset($_SESSION['ssms_pending']);
+function ssms_secret_decrypt(string $enc): ?string {
+    $key = ssms_app_key();
+    if (!$key) return null;
+    $raw = base64_decode($enc, true);
+    if ($raw === false || strlen($raw) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) return null;
+    $p = sodium_crypto_secretbox_open(substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), $key);
+    return $p === false ? null : $p;
+}
+
+/* ---- recovery codes: 10 x 10 chars from CSPRNG, stored only as keyed HMAC hashes ---- */
+function ssms_recovery_hash(string $code): string {
+    $key = ssms_app_key() ?? '';
+    return hash_hmac('sha256', strtoupper(preg_replace('/[^A-Z0-9]/i', '', $code)), $key);
+}
+/** @return array [plainCodesForOneTimeDisplay, storedRecords] */
+function ssms_recovery_generate(int $n = 10): array {
+    $plain = []; $stored = [];
+    for ($i = 0; $i < $n; $i++) {
+        $raw = ''; for ($j = 0; $j < 10; $j++) $raw .= SSMS_B32[random_int(0, 31)];
+        $plain[] = substr($raw, 0, 5) . '-' . substr($raw, 5);
+        $stored[] = ['h' => ssms_recovery_hash($raw), 'used_at' => null];
+    }
+    return [$plain, $stored];
 }

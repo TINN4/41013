@@ -286,18 +286,3 @@ This is a **front-end-only prototype** built for demonstration and educational p
 - The Tailwind CSS and Chart.js CDNs are used for rapid prototyping; a production build would self-host these assets and use a compiled Tailwind build.
 
 © 2024 Legislative Services Management System — Capstone Prototype. For demonstration purposes only.
-
----
-
-## Security & Voice Additions (session-system)
-
-**Two-step verification (email OTP)** — `session-system/mfa.php`, `includes/mfa.php`, `includes/mailer.php`, `includes/mail_config.php`
-- Required after both logins (admin password and QR badge). A 6-digit code is emailed through Gmail SMTP; no authenticator app needed.
-- Code expires in 5 minutes, works once, 5 wrong tries lock the account for 5 minutes, resend has a 60-second cooldown.
-- **Setup:** in `includes/mail_config.php` set `smtp_user` (sender Gmail), `smtp_pass` (a Gmail *App Password*, not the normal password) and `admin_email`. Leave `smtp_pass` empty for demo mode (code shown on screen + `data/otp_outbox.log`; never use in production).
-- Members' emails are entered by the admin in *Manage QR Badges & Devices* (collect them at onboarding, not on hearing day). Members with no email cannot finish login.
-
-**Voice to Text with input modes** — Proceedings Documentation (`assets/voice.js`, `assets/voice-ui.js`)
-- **Voice Isolation**: noise suppression + echo cancel + auto-gain, high/low-pass, clarity boost and an adaptive noise gate.
-- **Custom**: choose the mic and tune each filter and the gate sensitivity.
-- Live level meter, "Test mic", and dictated text is inserted into the entry box for review. Needs Chrome/Edge and HTTPS or localhost.

@@ -338,30 +338,21 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .sidebar-backdrop { display: none !important; }
 }
 
-/* ===== Voice to Text ===== */
-.vmode { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
-.vmode-opt { display:flex; gap:12px; align-items:flex-start; text-align:left; padding:14px; border-radius:12px; border:1.5px solid var(--line); background:#fff; cursor:pointer; font-family:inherit; color:var(--ink-900); transition:border-color .15s, box-shadow .15s, background .15s; }
-.vmode-opt:hover { border-color:var(--blue-500); }
-.vmode-opt.on { border-color:var(--blue-600); background:#F2F7FD; box-shadow:0 0 0 3px rgba(59,125,196,.14); }
-.vmode-opt b { display:block; font-size:14px; margin-bottom:3px; }
-.vmode-opt small { display:block; font-size:12px; color:var(--ink-600); line-height:1.4; }
-.vm-ic { width:34px; height:34px; border-radius:9px; background:var(--paper-alt); color:var(--blue-700); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.vmode-opt.on .vm-ic { background:var(--blue-600); color:#fff; }
-.vcustom { border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; background:var(--paper); }
-.vtoggles { display:flex; flex-wrap:wrap; gap:6px 18px; margin:4px 0 12px; font-size:13px; }
-.vtoggles label { display:flex; align-items:center; gap:6px; cursor:pointer; }
-.vsliders { display:grid; grid-template-columns:1fr 1fr; gap:12px 18px; }
-.vsliders label { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:var(--ink-600); margin-bottom:4px; }
-.vsliders output { font-family:'IBM Plex Mono',monospace; color:var(--blue-700); }
-.vsliders input[type=range] { width:100%; accent-color:var(--blue-600); }
-.vmeter-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
-.vmeter { flex:1; height:10px; background:var(--paper-alt); border-radius:99px; overflow:hidden; border:1px solid var(--line); }
-#vBar { height:100%; width:0; background:var(--ok-600); transition:width .05s linear, background .15s; }
-#vBar.closed { background:#9AA7B5; }
-.vgate { font-size:12px; font-weight:600; color:var(--ink-600); min-width:112px; text-align:right; }
-.vgate.on { color:var(--ok-600); } .vgate.off { color:#7B8896; }
-.vtranscript { min-height:72px; max-height:220px; overflow:auto; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:#fff; font-size:14px; line-height:1.6; }
-.vtranscript .ph { color:#8A97A5; } .vtranscript .interim { color:#8A97A5; }
-.vnote { margin-top:10px; font-size:12.5px; color:var(--blue-700); background:#E5EEF8; border-radius:9px; padding:8px 11px; }
-.vnote.bad { color:var(--bad-600); background:var(--bad-100); }
-@media (max-width:640px){ .vmode, .vsliders { grid-template-columns:1fr; } }
+/* ---- additions for RBAC/MFA screens (existing design tokens reused) ---- */
+.skip-link { position:absolute; left:-999px; top:8px; background:var(--navy-950); color:#fff; padding:8px 14px; border-radius:8px; z-index:1000; }
+.skip-link:focus { left:8px; }
+:focus-visible { outline:3px solid var(--gold-500); outline-offset:2px; }
+.mono { font-family:'IBM Plex Mono', monospace; }
+.code-box { font-family:'IBM Plex Mono', monospace; background:var(--paper-alt); border:1px dashed var(--blue-500); border-radius:10px; padding:12px 14px; word-break:break-all; font-size:14px; }
+.recovery-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.recovery-grid span { font-family:'IBM Plex Mono', monospace; background:var(--paper-alt); border-radius:8px; padding:8px 10px; text-align:center; font-size:14px; }
+.inline-form { display:inline; margin:0; }
+.badge-draft { background:#EEF1F5; color:var(--ink-600); }
+.alert-info { background:#E5EEF8; color:var(--blue-700); }
+.form-group input[type=checkbox] { width:auto; }
+.stat-link { display:block; text-decoration:none; color:inherit; }
+.notice-box { border-left:4px solid var(--gold-500); background:var(--gold-100); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; }
+.quorum-banner.undetermined { background:var(--warn-100); }
+.quorum-banner.undetermined .qnum, .quorum-banner.undetermined .qlabel i { color:var(--warn-600); }
+.watermark-draft { color:var(--bad-600); font-weight:700; text-align:center; letter-spacing:.08em; }
+@media print { .skip-link, .no-print { display:none !important; } }

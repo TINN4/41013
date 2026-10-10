@@ -1,37 +1,25 @@
 <?php
 /**
- * Configuration for QR + Geofence + Device-Bound Login.
- * Edit the values below to match your actual office location and policy.
+ * Geofence configuration for QR login (values come from config/.env).
+ * LIMITATION: the coordinates are reported by the user's browser. A technically capable user can
+ * spoof them, and indoor GPS can be inaccurate. The geofence is a deterrent / policy control,
+ * NOT proof of physical presence. It is never the only factor (badge + device secret [+ MFA]).
  */
+function ssms_geofence_enabled(): bool { return strtolower((string)ssms_cfg('SSMS_GEOFENCE_ENABLED', 'true')) !== 'false'; }
+function ssms_office_lat(): float { return (float)ssms_cfg('SSMS_OFFICE_LAT', '14.81053705'); }
+function ssms_office_lng(): float { return (float)ssms_cfg('SSMS_OFFICE_LNG', '121.046147894731'); }
+function ssms_allowed_radius(): int { return (int)ssms_cfg('SSMS_ALLOWED_RADIUS_METERS', '300'); }
 
-// City Hall — Sangguniang Panlungsod ng San Jose del Monte, Bulacan.
-// (Source: public GPS coordinate listings for the City of San Jose del Monte
-// municipal building. Adjust to your exact building's coordinates for accuracy.)
-define('SSMS_OFFICE_LAT', 14.81053705);
-define('SSMS_OFFICE_LNG', 121.046147894731);
-
-// Allowed radius, in meters, from the office coordinates above.
-// GPS accuracy indoors/urban areas is commonly ±20-50m, so keep this
-// generous enough to avoid locking out legitimate users standing inside
-// the building.
-define('SSMS_ALLOWED_RADIUS_METERS', 300);
-
-/**
- * Haversine distance between two lat/lng points, in meters.
- */
-function ssms_distance_meters($lat1, $lng1, $lat2, $lng2) {
-    $earthRadius = 6371000; // meters
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLng = deg2rad($lng2 - $lng1);
-    $a = sin($dLat / 2) * sin($dLat / 2) +
-         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-         sin($dLng / 2) * sin($dLng / 2);
-    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-    return $earthRadius * $c;
+function ssms_distance_meters(float $lat1, float $lng1, float $lat2, float $lng2): float {
+    $r = 6371000;
+    $dLat = deg2rad($lat2 - $lat1); $dLng = deg2rad($lng2 - $lng1);
+    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+    return $r * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
-
-function ssms_within_geofence($lat, $lng) {
-    if ($lat === null || $lng === null) return false;
-    $d = ssms_distance_meters((float)$lat, (float)$lng, SSMS_OFFICE_LAT, SSMS_OFFICE_LNG);
-    return $d <= SSMS_ALLOWED_RADIUS_METERS;
+function ssms_within_geofence($lat, $lng): bool {
+    if (!ssms_geofence_enabled()) return true;
+    if (!is_numeric($lat) || !is_numeric($lng)) return false;
+    $lat = (float)$lat; $lng = (float)$lng;
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) return false;
+    return ssms_distance_meters($lat, $lng, ssms_office_lat(), ssms_office_lng()) <= ssms_allowed_radius();
 }

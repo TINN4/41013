@@ -1,11 +1,65 @@
 [
-  {"id": 1, "name": "Hon. R. Almazan", "position": "City Vice Mayor / Presiding Officer", "committee": "Presiding"},
-  {"id": 2, "name": "Hon. D. Santos", "position": "City Councilor", "committee": "Committee on Finance"},
-  {"id": 3, "name": "Hon. M. Reyes", "position": "City Councilor", "committee": "Committee on Health"},
-  {"id": 4, "name": "Hon. J. Cruz", "position": "City Councilor", "committee": "Committee on Public Works"},
-  {"id": 5, "name": "Hon. A. Bautista", "position": "City Councilor", "committee": "Committee on Education"},
-  {"id": 6, "name": "Hon. P. Villanueva", "position": "City Councilor", "committee": "Committee on Environment"},
-  {"id": 7, "name": "Hon. L. Fernandez", "position": "City Councilor", "committee": "Committee on Peace and Order"},
-  {"id": 8, "name": "Hon. C. Domingo", "position": "ABC President (Ex-Officio)", "committee": "Liga ng mga Barangay"},
-  {"id": 9, "name": "Hon. E. Manalo", "position": "SK Federation President (Ex-Officio)", "committee": "SK Federation"}
+    {
+        "id": 1,
+        "name": "Hon. R. Almazan",
+        "position": "City Vice Mayor / Presiding Officer",
+        "committee": "Presiding",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 2,
+        "name": "Hon. D. Santos",
+        "position": "City Councilor",
+        "committee": "Committee on Finance",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 3,
+        "name": "Hon. M. Reyes",
+        "position": "City Councilor",
+        "committee": "Committee on Health",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 4,
+        "name": "Hon. J. Cruz",
+        "position": "City Councilor",
+        "committee": "Committee on Public Works",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 5,
+        "name": "Hon. A. Bautista",
+        "position": "City Councilor",
+        "committee": "Committee on Education",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 6,
+        "name": "Hon. P. Villanueva",
+        "position": "City Councilor",
+        "committee": "Committee on Environment",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 7,
+        "name": "Hon. L. Fernandez",
+        "position": "City Councilor",
+        "committee": "Committee on Peace and Order",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 8,
+        "name": "Hon. C. Domingo",
+        "position": "ABC President (Ex-Officio)",
+        "committee": "Liga ng mga Barangay",
+        "eligible_for_quorum": true
+    },
+    {
+        "id": 9,
+        "name": "Hon. E. Manalo",
+        "position": "SK Federation President (Ex-Officio)",
+        "committee": "SK Federation",
+        "eligible_for_quorum": true
+    }
 ]

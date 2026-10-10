@@ -1,0 +1,14 @@
+{
+    "quorum_rule": {
+        "basis": "eligible_members",
+        "type": "majority",
+        "numerator": 1,
+        "denominator": 2,
+        "fixed": null,
+        "confirmed_by_office": false,
+        "confirmed_by": null,
+        "note": "DEFAULT majority-of-members rule. Must be confirmed by the authorized office against the applicable rules of procedure."
+    },
+    "default_session_minutes": 180,
+    "require_final_agenda_to_start": true
+}

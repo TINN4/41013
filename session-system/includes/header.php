@@ -1,13 +1,14 @@
 <?php
 // Expects: $page_title, $page_sub, $active_page (before include)
-$base = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false) ? '../' : '';
+$base = ssms_base();
+$__flash = ssms_flash_pull();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= htmlspecialchars($page_title ?? 'Session Management', ENT_QUOTES, 'UTF-8') ?> &mdash; SSMS</title>
+<title><?= ssms_e($page_title ?? 'Session Management') ?> &mdash; SSMS</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,20 +17,26 @@ $base = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false) ? '../' : '';
 <link rel="stylesheet" href="<?= $base ?>assets/style.css">
 </head>
 <body>
+<a class="skip-link" href="#ssms-main">Skip to main content</a>
 <div class="app-shell">
   <?php include __DIR__ . '/sidebar.php'; ?>
 
   <div class="main-col">
     <header class="topbar">
-      <button class="menu-btn" id="ssms-menu-btn"><i class="fa-solid fa-bars"></i></button>
+      <button class="menu-btn" id="ssms-menu-btn" type="button" aria-label="Toggle navigation menu" aria-controls="ssms-sidebar"><i class="fa-solid fa-bars"></i></button>
       <div>
-        <div class="page-title"><?= htmlspecialchars($page_title ?? '', ENT_QUOTES, 'UTF-8') ?></div>
-        <div class="page-sub"><?= htmlspecialchars($page_sub ?? '', ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="page-title"><?= ssms_e($page_title ?? '') ?></div>
+        <div class="page-sub"><?= ssms_e($page_sub ?? '') ?></div>
       </div>
       <div class="spacer"></div>
       <?php if (!empty($show_live_badge)): ?>
-        <span class="badge-live"><span class="pulse-dot"></span> Live</span>
+        <span class="badge-live" id="ssms-live-badge"><span class="pulse-dot"></span> Live</span>
       <?php endif; ?>
     </header>
 
-    <main class="content">
+    <main class="content" id="ssms-main">
+    <div aria-live="polite">
+    <?php foreach ($__flash as $f): ?>
+      <div class="alert alert-<?= $f['type'] === 'ok' ? 'ok' : ($f['type'] === 'warn' ? 'warn' : 'bad') ?>" role="<?= $f['type'] === 'bad' ? 'alert' : 'status' ?>"><i class="fa-solid <?= $f['type'] === 'ok' ? 'fa-circle-check' : 'fa-circle-exclamation' ?>"></i> <?= ssms_e($f['msg']) ?></div>
+    <?php endforeach; ?>
+    </div>

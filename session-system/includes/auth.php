@@ -1,12 +1,4 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-if (empty($_SESSION['ssms_user'])) {
-    $inSubfolder = (strpos($_SERVER['SCRIPT_NAME'], '/modules/') !== false)
-                || (strpos($_SERVER['SCRIPT_NAME'], '/api/') !== false);
-    $base = $inSubfolder ? '../' : '';
-    header('Location: ' . $base . 'login.php');
-    exit();
-}
+/** Compatibility shim: all authentication now lives in bootstrap.php. Pages call ssms_require('perm'). */
+require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/domain.php';

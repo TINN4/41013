@@ -1,3 +1,5 @@
-session-system/includes/mail_config.php
-session-system/data/otp_outbox.log
-session-system/data/mfa_state.json
+session-system/config/.env
+session-system/data/backups/
+session-system/data/audit.log
+session-system/data/.lock_*
+session-system/data/ratelimit.json

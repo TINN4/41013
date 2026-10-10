@@ -1,44 +1,80 @@
 [
-  {
-    "id": 1,
-    "session_id": 1,
-    "timestamp": "2026-08-06 13:02",
-    "author": "Secretary's Office",
-    "note": "Session called to order by the Presiding Officer, Hon. R. Almazan. Roll call conducted; quorum declared present."
-  },
-  {
-    "id": 2,
-    "session_id": 1,
-    "timestamp": "2026-08-06 13:07",
-    "author": "Secretary's Office",
-    "note": "Minutes of the 57th Regular Session read into record. Motion to approve by Hon. J. Cruz, seconded by Hon. D. Santos."
-  },
-  {
-    "id": 3,
-    "session_id": 1,
-    "timestamp": "2026-08-06 13:15",
-    "author": "Secretary's Office",
-    "note": "Floor opened for discussion on Proposed Ordinance No. 2026-014 (Solid Waste Management Program), sponsored by Hon. P. Villanueva."
-  },
-  {
-    "id": 4,
-    "session_id": 3,
-    "timestamp": "2026-07-30 13:04",
-    "author": "Secretary's Office",
-    "note": "Session called to order. Roll call conducted; quorum declared present."
-  },
-  {
-    "id": 5,
-    "session_id": 3,
-    "timestamp": "2026-07-30 13:40",
-    "author": "Secretary's Office",
-    "note": "Resolution No. 2026-041 approved by unanimous vote."
-  },
-  {
-    "id": 6,
-    "session_id": 3,
-    "timestamp": "2026-07-30 14:20",
-    "author": "Secretary's Office",
-    "note": "Session adjourned by the Presiding Officer."
-  }
+    {
+        "id": 1,
+        "session_id": 1,
+        "timestamp": "2026-08-06 13:02",
+        "author": "Secretary's Office",
+        "note": "Session called to order by the Presiding Officer, Hon. R. Almazan. Roll call conducted; quorum declared present.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    },
+    {
+        "id": 2,
+        "session_id": 1,
+        "timestamp": "2026-08-06 13:07",
+        "author": "Secretary's Office",
+        "note": "Minutes of the 57th Regular Session read into record. Motion to approve by Hon. J. Cruz, seconded by Hon. D. Santos.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    },
+    {
+        "id": 3,
+        "session_id": 1,
+        "timestamp": "2026-08-06 13:15",
+        "author": "Secretary's Office",
+        "note": "Floor opened for discussion on Proposed Ordinance No. 2026-014 (Solid Waste Management Program), sponsored by Hon. P. Villanueva.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    },
+    {
+        "id": 4,
+        "session_id": 3,
+        "timestamp": "2026-07-30 13:04",
+        "author": "Secretary's Office",
+        "note": "Session called to order. Roll call conducted; quorum declared present.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    },
+    {
+        "id": 5,
+        "session_id": 3,
+        "timestamp": "2026-07-30 13:40",
+        "author": "Secretary's Office",
+        "note": "Resolution No. 2026-041 approved by unanimous vote.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    },
+    {
+        "id": 6,
+        "session_id": 3,
+        "timestamp": "2026-07-30 14:20",
+        "author": "Secretary's Office",
+        "note": "Session adjourned by the Presiding Officer.",
+        "status": "Draft",
+        "kind": "Discussion",
+        "agenda_id": null,
+        "speaker": "",
+        "version": 1,
+        "author_id": null
+    }
 ]

@@ -1,128 +1,182 @@
 [
-  {
-    "id": 1,
-    "session_id": 1,
-    "member_id": 1,
-    "status": "Present",
-    "time_in": "13:02"
-  },
-  {
-    "id": 2,
-    "session_id": 1,
-    "member_id": 2,
-    "status": "Present",
-    "time_in": "13:01"
-  },
-  {
-    "id": 3,
-    "session_id": 1,
-    "member_id": 3,
-    "status": "Present",
-    "time_in": "13:03"
-  },
-  {
-    "id": 4,
-    "session_id": 1,
-    "member_id": 4,
-    "status": "Present",
-    "time_in": "13:00"
-  },
-  {
-    "id": 5,
-    "session_id": 1,
-    "member_id": 5,
-    "status": "Excused",
-    "time_in": null
-  },
-  {
-    "id": 6,
-    "session_id": 1,
-    "member_id": 6,
-    "status": "Present",
-    "time_in": "13:04"
-  },
-  {
-    "id": 7,
-    "session_id": 1,
-    "member_id": 7,
-    "status": "Absent",
-    "time_in": null
-  },
-  {
-    "id": 8,
-    "session_id": 1,
-    "member_id": 8,
-    "status": "Present",
-    "time_in": "13:02"
-  },
-  {
-    "id": 9,
-    "session_id": 1,
-    "member_id": 9,
-    "status": "Absent",
-    "time_in": null
-  },
-  {
-    "id": 10,
-    "session_id": 3,
-    "member_id": 1,
-    "status": "Present",
-    "time_in": "13:00"
-  },
-  {
-    "id": 11,
-    "session_id": 3,
-    "member_id": 2,
-    "status": "Present",
-    "time_in": "13:00"
-  },
-  {
-    "id": 12,
-    "session_id": 3,
-    "member_id": 3,
-    "status": "Present",
-    "time_in": "13:05"
-  },
-  {
-    "id": 13,
-    "session_id": 3,
-    "member_id": 4,
-    "status": "Present",
-    "time_in": "13:02"
-  },
-  {
-    "id": 14,
-    "session_id": 3,
-    "member_id": 5,
-    "status": "Present",
-    "time_in": "13:01"
-  },
-  {
-    "id": 15,
-    "session_id": 3,
-    "member_id": 6,
-    "status": "Present",
-    "time_in": "13:03"
-  },
-  {
-    "id": 16,
-    "session_id": 3,
-    "member_id": 7,
-    "status": "Present",
-    "time_in": "13:06"
-  },
-  {
-    "id": 17,
-    "session_id": 3,
-    "member_id": 8,
-    "status": "Excused",
-    "time_in": null
-  },
-  {
-    "id": 18,
-    "session_id": 3,
-    "member_id": 9,
-    "status": "Present",
-    "time_in": "13:02"
-  }
+    {
+        "id": 1,
+        "session_id": 1,
+        "member_id": 1,
+        "status": "Present",
+        "time_in": "13:02",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 2,
+        "session_id": 1,
+        "member_id": 2,
+        "status": "Present",
+        "time_in": "13:01",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 3,
+        "session_id": 1,
+        "member_id": 3,
+        "status": "Present",
+        "time_in": "13:03",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 4,
+        "session_id": 1,
+        "member_id": 4,
+        "status": "Present",
+        "time_in": "13:00",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 5,
+        "session_id": 1,
+        "member_id": 5,
+        "status": "Excused",
+        "time_in": null,
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 6,
+        "session_id": 1,
+        "member_id": 6,
+        "status": "Present",
+        "time_in": "13:04",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 7,
+        "session_id": 1,
+        "member_id": 7,
+        "status": "Absent",
+        "time_in": null,
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 8,
+        "session_id": 1,
+        "member_id": 8,
+        "status": "Present",
+        "time_in": "13:02",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 9,
+        "session_id": 1,
+        "member_id": 9,
+        "status": "Absent",
+        "time_in": null,
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 10,
+        "session_id": 3,
+        "member_id": 1,
+        "status": "Present",
+        "time_in": "13:00",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 11,
+        "session_id": 3,
+        "member_id": 2,
+        "status": "Present",
+        "time_in": "13:00",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 12,
+        "session_id": 3,
+        "member_id": 3,
+        "status": "Present",
+        "time_in": "13:05",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 13,
+        "session_id": 3,
+        "member_id": 4,
+        "status": "Present",
+        "time_in": "13:02",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 14,
+        "session_id": 3,
+        "member_id": 5,
+        "status": "Present",
+        "time_in": "13:01",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 15,
+        "session_id": 3,
+        "member_id": 6,
+        "status": "Present",
+        "time_in": "13:03",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 16,
+        "session_id": 3,
+        "member_id": 7,
+        "status": "Present",
+        "time_in": "13:06",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 17,
+        "session_id": 3,
+        "member_id": 8,
+        "status": "Excused",
+        "time_in": null,
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    },
+    {
+        "id": 18,
+        "session_id": 3,
+        "member_id": 9,
+        "status": "Present",
+        "time_in": "13:02",
+        "time_out": null,
+        "recorded_by": null,
+        "updated_at": null
+    }
 ]
