@@ -1,0 +1,138 @@
+/* ==========================================================================
+   Legislative Services Management System — Global Styles
+   Design tokens, component classes, animations, dark mode, print styles
+   ========================================================================== */
+
+:root {
+  --ls-primary: #1e40af;
+  --ls-primary-light: #3b82f6;
+  --ls-primary-dark: #1e3a8a;
+  --ls-slate: #475569;
+  --ls-emerald: #059669;
+  --ls-amber: #d97706;
+  --ls-red: #dc2626;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* ----- Scrollbar ----- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: content-box; }
+.dark ::-webkit-scrollbar-thumb { background: #475569; background-clip: content-box; }
+
+/* ----- Loading screen ----- */
+#ls-loading-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+  transition: opacity .5s ease, visibility .5s ease;
+}
+#ls-loading-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.ls-loader-ring {
+  width: 64px; height: 64px; border: 5px solid rgba(255,255,255,.25);
+  border-top-color: #fff; border-radius: 50%; animation: ls-spin .9s linear infinite;
+}
+@keyframes ls-spin { to { transform: rotate(360deg); } }
+
+/* ----- Sidebar transitions ----- */
+#ls-sidebar { transition: transform .3s ease, width .3s ease; }
+
+/* ----- Page transitions ----- */
+.ls-page { animation: ls-fade-up .35s ease both; }
+@keyframes ls-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ----- Skeleton shimmer ----- */
+.ls-skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%; animation: ls-shimmer 1.4s infinite;
+  border-radius: .5rem;
+}
+.dark .ls-skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+@keyframes ls-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ----- Card hover ----- */
+.ls-card-hover { transition: transform .2s ease, box-shadow .2s ease; }
+.ls-card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(15,23,42,.18); }
+
+/* ----- Nav item active ----- */
+.ls-nav-active {
+  background: linear-gradient(90deg, rgba(59,130,246,.18), rgba(59,130,246,.06));
+  color: #fff;
+  position: relative;
+}
+.ls-nav-active::before {
+  content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px;
+  background: #60a5fa; border-radius: 0 4px 4px 0;
+}
+
+/* ----- Toast container ----- */
+#ls-toast-container {
+  position: fixed; top: 1rem; right: 1rem; z-index: 10000;
+  display: flex; flex-direction: column; gap: .5rem; max-width: 22rem;
+}
+
+/* ----- Modal ----- */
+.ls-modal-backdrop { animation: ls-fade .2s ease both; }
+.ls-modal-panel { animation: ls-pop .25s cubic-bezier(.16,1,.3,1) both; }
+@keyframes ls-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ls-pop { from { opacity: 0; transform: scale(.96) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+/* ----- Chart container fixed height helper ----- */
+.ls-chart-wrap { position: relative; width: 100%; }
+
+/* ----- Table row hover ----- */
+.ls-row-hover:hover { background-color: #f8fafc; }
+.dark .ls-row-hover:hover { background-color: rgba(51,65,85,.4); }
+
+/* ----- Status pulse ----- */
+.ls-pulse-dot { position: relative; }
+.ls-pulse-dot::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 9999px;
+  background: inherit; opacity: .5; animation: ls-ping 1.6s cubic-bezier(0,0,.2,1) infinite;
+}
+@keyframes ls-ping { 75%,100% { transform: scale(2); opacity: 0; } }
+
+/* ----- Badge variants (used inline too) ----- */
+.badge { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .625rem; border-radius: 9999px; font-size: .6875rem; font-weight: 600; line-height: 1.25rem; }
+
+/* ----- Print ----- */
+@media print {
+  #ls-sidebar, #ls-topbar, .no-print { display: none !important; }
+  #ls-main { margin: 0 !important; padding: 0 !important; }
+  .ls-page { animation: none !important; }
+  body { background: #fff !important; }
+  .print-block { display: block !important; }
+}
+.print-hidden { display: none; }
+@media print { .print-hidden { display: block !important; } }
+
+/* ----- Tooltip ----- */
+[data-ls-tooltip] { position: relative; }
+[data-ls-tooltip]:hover::after {
+  content: attr(data-ls-tooltip); position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
+  background: #0f172a; color: #fff; padding: .25rem .5rem; border-radius: .375rem; font-size: .6875rem;
+  white-space: nowrap; z-index: 50; pointer-events: none;
+}
+
+/* ----- Focus ring ----- */
+.ls-focus:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+
+/* Hide scrollbar utility for horizontal scrollers */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Mobile sidebar backdrop */
+#ls-mobile-backdrop { transition: opacity .3s ease; }
