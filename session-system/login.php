@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/authflow.php';
 ssms_start_session();
 
-if (ssms_current_user()) ssms_redirect(!empty($_SESSION['mfa_enroll_only']) ? 'mfa_setup.php' : 'dashboard.php');
+if (ssms_current_user()) ssms_redirect('dashboard.php');
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

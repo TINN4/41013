@@ -21,7 +21,6 @@ if (!is_file($envFile)) {
 define('SSMS_DATA_DIR', $root . '/data');
 require $root . '/includes/config.php';
 require $root . '/includes/store.php';
-require $root . '/includes/mfa.php';
 if (ssms_cfg('SSMS_ENV') === 'production' && $dev) { fwrite(STDERR, "REFUSED: --dev seeding is not allowed when SSMS_ENV=production\n"); exit(1); }
 
 @mkdir(SSMS_DATA_DIR, 0750, true);
@@ -62,7 +61,7 @@ ssms_mutate('proceedings', function ($rows) use (&$changed) {
     }
     return $rows;
 });
-foreach (['users', 'badges', 'attendance_history', 'proceedings_history', 'agenda_revisions', 'minutes_versions'] as $t) {
+foreach (['users', 'otp_challenges', 'badges', 'attendance_history', 'proceedings_history', 'agenda_revisions', 'minutes_versions'] as $t) {
     if (!is_file(ssms_path($t))) ssms_store_raw($t, []);
 }
 if (!is_file(ssms_path('settings'))) {
@@ -102,7 +101,10 @@ if ($dev) {
         ssms_insert('users', [
             'username' => $u, 'name' => $name, 'role' => $role, 'member_id' => $member,
             'password_hash' => password_hash($pw, PASSWORD_DEFAULT), 'active' => true,
-            'mfa' => ['enabled' => false, 'secret_enc' => null, 'last_counter' => 0, 'recovery' => [], 'enrolled_at' => null],
+            // DEV ONLY: pre-verified placeholder addresses (reserved .invalid domain) so the dev accounts can exercise the OTP flow
+            // against a local SMTP sink. Real accounts are NEVER auto-verified. Change them in User Accounts to test a real inbox.
+            'email' => $u . '@dev.invalid', 'email_verified' => true, 'email_verified_at' => $now, 'pending_email' => null,
+            'mfa' => ['email_otp' => false],
             'failed_count' => 0, 'locked_until' => 0, 'session_version' => 1, 'created_at' => $now, 'last_login_at' => null,
             'is_dev_account' => true,
         ]);
@@ -110,4 +112,6 @@ if ($dev) {
     }
     echo "\nDEV ONLY password for all seeded accounts: $pw\nDelete these accounts (Admin > User Accounts) before any real use.\n";
 }
+$legacy = 0; foreach (ssms_read('users') as $r) if (!array_key_exists('email', $r)) $legacy++;
+if ($legacy) echo "NOTE: $legacy existing account(s) predate e-mail OTP and have no e-mail fields. Run: php tools/migrate_email_otp.php --apply\n";
 echo "done\n";

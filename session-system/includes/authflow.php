@@ -1,9 +1,8 @@
 <?php
-/** Login / MFA workflow primitives shared by login.php, mfa.php, qr login API, mfa_setup.php. */
-require_once __DIR__ . '/mfa.php';
+/** Login / MFA workflow primitives shared by login.php, mfa.php, qr login API, my_security.php. */
+require_once __DIR__ . '/otp.php';
 
-const SSMS_PENDING_TTL = 300;           // password/QR stage -> MFA stage must complete within 5 min
-const SSMS_MFA_MAX_TRIES = 5;
+const SSMS_PENDING_TTL = 900;           // first factor -> code entry must complete within 15 min (the code itself lives 5 min)
 
 /** Fixed dummy hash so unknown usernames cost the same time as wrong passwords. */
 function ssms_dummy_hash(): string {
@@ -48,20 +47,43 @@ function ssms_password_login(string $username, string $password, string &$public
     return null;
 }
 
-/** After the first factor: either complete login (no MFA) or park in a restricted pending state. */
+/**
+ * After the first factor (password or QR badge) the SERVER decides what happens next from stored account data:
+ *   none    -> full session now (only where policy allows password-only sign-in)
+ *   otp     -> restricted pending state, code e-mailed to the verified address, no access yet
+ *   blocked -> refused (MFA applies but no verified address exists); nothing is issued
+ * Returns the page to redirect to.
+ */
 function ssms_after_first_factor(array $user, string $method, array $extra = []): string {
     ssms_start_session();
-    if (ssms_mfa_enabled($user)) {
+    $actor = ['id' => $user['id'], 'role' => $user['role'] ?? null];
+    $gate = ssms_mfa_gate($user);
+    if ($gate === 'blocked') {
         session_regenerate_id(true);
-        $_SESSION = ['csrf' => bin2hex(random_bytes(32)), 'pending' => ['uid' => (int)$user['id'], 'via' => $method, 't' => time(), 'tries' => 0, 'extra' => $extra]];
-        ssms_audit('auth.first_factor_ok_mfa_pending', $user['id'], 'ok', ['via' => $method], ['id' => $user['id'], 'role' => $user['role']]);
+        $_SESSION = ['csrf' => bin2hex(random_bytes(32))];
+        ssms_audit('auth.login', $user['id'], 'blocked', ['via' => $method, 'reason' => 'mfa_required_no_verified_email'], $actor);
+        ssms_flash('bad', 'Your account requires a verified e-mail address for sign-in codes, and none is verified yet. Open the verification link sent to your e-mail, or ask the System Administrator to resend it.');
+        return 'login.php';
+    }
+    if ($gate === 'otp') {
+        session_regenerate_id(true);
+        $txid = bin2hex(random_bytes(16));
+        $_SESSION = ['csrf' => bin2hex(random_bytes(32)), 'pending' => [
+            'uid' => (int)$user['id'], 'via' => $method, 't' => time(), 'tries' => 0, 'extra' => $extra,
+            'txid' => $txid, 'sv' => (int)($user['session_version'] ?? 1), 'resend_at' => 0]];
+        ssms_audit('auth.first_factor_ok_mfa_pending', $user['id'], 'ok', ['via' => $method], $actor);
+        $r = ssms_otp_issue($user, $txid);
+        if (in_array($r['status'], ['sent', 'cooldown'], true)) $_SESSION['pending']['resend_at'] = time() + (int)$r['wait'];
+        [$t, $m] = ssms_otp_notice($r, (string)$user['email']);
+        ssms_flash($t, $m);
         return 'mfa.php';
     }
-    ssms_establish_session($user, $method, $extra);
-    ssms_audit('auth.login', $user['id'], 'ok', ['via' => $method, 'mfa' => 'not_enrolled'], ['id' => $user['id'], 'role' => $user['role']]);
-    return !empty($_SESSION['mfa_enroll_only']) ? 'mfa_setup.php' : 'dashboard.php';
+    ssms_establish_session($user, $method, $extra, false);
+    ssms_audit('auth.login', $user['id'], 'ok', ['via' => $method, 'mfa' => 'not_required_by_policy'], $actor);
+    return 'dashboard.php';
 }
 
+/** The pending (password-verified, code not yet entered) login, or null if absent/expired/stale. */
 function ssms_pending(): ?array {
     ssms_start_session();
     $p = $_SESSION['pending'] ?? null;
@@ -69,41 +91,9 @@ function ssms_pending(): ?array {
     if (time() - $p['t'] > SSMS_PENDING_TTL) { unset($_SESSION['pending']); return null; }
     return $p;
 }
-
-/** Atomically verify + record a TOTP code (prevents replay even with concurrent requests). */
-function ssms_mfa_consume_totp(int $uid, string $code): ?bool {
-    $result = false; $misconfigured = false;
-    ssms_mutate('users', function (array $rows) use ($uid, $code, &$result, &$misconfigured) {
-        foreach ($rows as &$r) {
-            if ((int)$r['id'] !== $uid || empty($r['mfa']['enabled'])) continue;
-            $secret = ssms_secret_decrypt((string)$r['mfa']['secret_enc']);
-            if ($secret === null) { $misconfigured = true; break; }
-            $c = ssms_totp_verify($secret, $code, (int)($r['mfa']['last_counter'] ?? 0));
-            if ($c !== null) { $r['mfa']['last_counter'] = $c; $result = true; }
-        }
-        return $rows;
-    });
-    return $misconfigured ? null : $result;
-}
-
-/** Consume a recovery code. Returns remaining unused count on success, null on failure. */
-function ssms_mfa_consume_recovery(int $uid, string $code): ?int {
-    $remaining = null;
-    $h = ssms_recovery_hash($code);
-    ssms_mutate('users', function (array $rows) use ($uid, $h, &$remaining) {
-        foreach ($rows as &$r) {
-            if ((int)$r['id'] !== $uid) continue;
-            foreach ($r['mfa']['recovery'] ?? [] as $i => $rc) {
-                if ($rc['used_at'] === null && hash_equals($rc['h'], $h)) {
-                    $r['mfa']['recovery'][$i]['used_at'] = ssms_now();
-                    $remaining = count(array_filter($r['mfa']['recovery'], fn($x) => $x['used_at'] === null));
-                    break;
-                }
-            }
-        }
-        return $rows;
-    });
-    return $remaining;
+function ssms_pending_clear(bool $cancelChallenge = true): void {
+    if ($cancelChallenge && !empty($_SESSION['pending']['txid'])) ssms_otp_cancel_tx((string)$_SESSION['pending']['txid']);
+    unset($_SESSION['pending']);
 }
 
 /** Shared HTML shell for pre-login / account pages (same look as the original login). */

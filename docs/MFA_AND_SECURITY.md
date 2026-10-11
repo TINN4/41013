@@ -1,42 +1,35 @@
-# MFA & Security Implementation Summary
+# MFA & Security Summary (e-mail OTP)
 
-## Login flow (password and QR share the same gate)
-1. Password (or QR badge+device) verified → **first factor only**.
-2. If MFA is enabled: a server-side *pending* state is created (5-minute TTL, 5 tries) and the session id is regenerated. The pending state grants **no** access: protected pages redirect to login, APIs return 401 (tests C11, C12, G14).
-3. User enters a TOTP code **or** a recovery code at `mfa.php`.
-4. Only then `ssms_establish_session()` regenerates the session id again and loads the role from `users.json`.
-5. If the account's MFA policy is *required* but not enrolled, the session is **enrollment-only**: every page except `mfa_setup.php`/logout redirects there (C1, C3).
-Nothing client-side (cookies, localStorage) is trusted as proof of MFA (F7).
+Authenticator-app TOTP, QR enrollment and recovery codes were **removed**. The second factor is a one-time code e-mailed to the account holder's *verified* address. Setup, SMTP, migration, recovery and the defense Q&A are in `EMAIL_OTP_SETUP.md`.
 
-## TOTP
-* RFC 6238/4226, HMAC-SHA1, 6 digits, 30 s, ±1 step window. Implemented with PHP built-ins only; **verified against the RFC 6238 test vectors** (`tests/unit_totp.php`) and cross-checked against an independent Python implementation in the HTTP tests.
-* 160-bit secret from `random_bytes`; QR rendered **in the browser** with a vendored library (no third-party service sees the secret); manual key also shown; secret is never in a URL or log.
-* Secret stored encrypted (libsodium `secretbox`) with `SSMS_APP_KEY` from the environment/`.env` (not in code). Missing/undecryptable secret ⇒ login fails with a configuration error; MFA is **never silently disabled**.
-* Replay prevention: last accepted time-step stored; checked and updated atomically under a file lock (C16).
-* Throttling: 5 wrong codes → 15-minute lockout (progressive), pending state destroyed (C20).
-* 10 recovery codes (50 bits each, CSPRNG), shown once, stored only as keyed HMAC-SHA256, single-use (C7, C8, C17, C18).
-* Re-verification (password + current TOTP) for regenerating codes or disabling MFA. Disabling is refused for roles where MFA is required.
+## Policy (server-side, from stored account data only)
+| Situation | Result |
+|---|---|
+| `sysadmin`, `secretary`, `presiding` (built-in floor; config can only add roles) | e-mail code **always**; no verified address ⇒ sign-in refused |
+| Other role, policy `optional`, user opted in | code required; opt-in only possible with a verified address |
+| Other role, policy `optional`, not opted in | password (or QR badge) only |
+| Other role, policy `required` | code; no verified address ⇒ password-only during `SSMS_MFA_GRACE_DAYS`, then refused |
+| Unknown / malformed role | refused |
+`ssms_current_user()` re-evaluates this on **every request**: a session without a completed code is destroyed for any account that requires one.
 
-## MFA policy (config/.env)
-`SSMS_MFA_REQUIRED_ROLES=sysadmin,secretary,presiding`; `SSMS_MFA_ORDINARY_POLICY=optional|required`; `SSMS_MFA_GRACE_DAYS`. **Recommended for a real deployment: `required` for all roles.**
+## Login flow
+1. Username + password (or QR badge + device secret) → first factor only. Generic error, throttled, audited.
+2. `ssms_after_first_factor()` decides `none | otp | blocked`. For `otp`: new session id, restricted *pending* state (grants nothing), 6-digit CSPRNG code e-mailed through PHPMailer/SMTP.
+3. `mfa.php`: masked address, code input, Verify, Send a new code (cooldown), Cancel.
+4. Server verifies under a table lock: right account, right pending login, active, unexpired, unused, attempts left. Success consumes the code atomically.
+5. `ssms_establish_session()` regenerates the session id again, stores user id, `session_version`, `mfa_passed=true`, and clears pending state.
 
-## Recovery / reset
-* Lost device: use a recovery code → regenerate codes.
-* No codes: one administrator **requests** a reset (reason mandatory); a **different** administrator **approves** (admin password re-entered by both). Effects: MFA cleared, sessions ended, user must re-enroll (F14–F19).
-* No usable administrator: server-side break-glass `php tools/mfa_break_glass.php <user> "<reason>"` (needs shell access; backs up data and audits).
+## Code protection
+5-minute expiry · 5 wrong tries per code (then the pending login is destroyed) · 60 s resend cooldown within one login · new code supersedes older ones · single use · HMAC-SHA256 hash stored (key derived from `SSMS_APP_KEY`), plaintext never stored, logged or returned · per-account/IP send caps · per-account failure lockout · CSRF on every POST · strict field whitelist on the code form · code is bound to the e-mail address it was sent to (address change cancels it) · pending login dies if the account is deactivated, locked, or its password/role/e-mail changes.
 
-## QR badge & device model
-* Badge QR = opaque 192-bit random identifier (no password/secret/role inside); stored only as SHA-256; expires (`SSMS_BADGE_VALID_DAYS`).
-* First scan must occur within `SSMS_BADGE_ENROLL_HOURS` after the admin issues it; the server then generates a 256-bit **device secret** returned once to the device (stored in that browser's localStorage; only its hash is stored server-side). Later logins need badge **and** device secret ⇒ a photographed badge alone is useless (G7, G8).
-* Re-issue/revoke/reset require `devices.manage` + the admin's password; revoke ends live sessions immediately (G10, G11).
-* QR login with MFA required stops at the MFA challenge (G13–G15). Responses reveal no name/role before MFA (G5).
-* **Geofence**: coordinates come from the user's browser and can be spoofed; indoor GPS is imprecise. It is a policy deterrent, not proof of presence. Neither the geofence nor a QR scan is treated as proof of physical presence for attendance, and the existing QR flow is *login* only — it does not record attendance.
-* Throttling by IP and by badge (G18); same-origin + JSON-only to stop login-CSRF (G16, G17).
+## E-mail ownership
+An address is trusted only after its owner proves control by opening an e-mailed link: either the invitation/password link (sets the password *and* verifies the address it was sent to) or the confirmation link (`verify_email.php`, confirm button = POST, so link scanners cannot verify). Addresses are unique across accounts. Changing the address of a privileged account needs request + approval by two different administrators; self-service changes need the current password and keep the old address active until the new one is confirmed (the old one is notified). Administrators never see password links; they are e-mailed.
 
-## Other protections
-`password_hash` (bcrypt/argon default), ≥12-char policy, generic login errors, progressive lockout, session cookies `HttpOnly; SameSite=Lax; Secure` (when HTTPS), strict session mode, 30-min idle / 8-h absolute timeouts (configurable), CSRF on all POSTs, escaped output everywhere (tested E2), no open redirects (`ssms_redirect` only relative), admin-issued one-time password links (24 h, hashed, single-use, moved out of the URL; H1–H4), hash-chained append-only audit log (tamper-evident, I1, I4) containing no secrets (I2), safe 500 pages with no stack traces (I6), security headers.
+## Failure behaviour
+SMTP down, missing SMTP settings, missing `SSMS_APP_KEY`, bad encryption setting, no verified address: mandatory roles get **no session**, a safe message, a sanitized log line, and a retry button. There is no fallback to password-only or to any other factor.
+
+## Unchanged protections
+`password_hash`, ≥12-char policy, generic login errors, progressive lockout, HttpOnly/SameSite cookies, idle/absolute timeouts, escaped output, same-origin relative redirects, hash-chained audit log (no secrets), safe 500 pages, QR badge + device binding + geofence (QR is a first factor; it does not bypass the code).
 
 ## Not implemented
-* **Email OTP** — not built (no SMTP configured/tested; the brief says do not claim it works). `SSMS_SMTP_*` keys are placeholders only.
-* SMS, external identity providers, WebAuthn/phishing-resistant MFA.
-* Content-Security-Policy (the existing pages use inline scripts and CDNs for fonts/icons).
+SMS, WebAuthn, external IdPs, CSP. See `KNOWN_LIMITATIONS.md`.

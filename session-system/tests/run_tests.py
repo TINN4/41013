@@ -1,104 +1,49 @@
 #!/usr/bin/env python3
 """
-SSMS end-to-end test suite. Starts `php -S` on a THROWAWAY COPY of the data directory and drives the
-real application over HTTP (no mocks). Own TOTP implementation => independent cross-check of the PHP one.
-Usage:  python3 tests/run_tests.py        (needs: php, python3, requests)
-Prereq: php tools/setup.php --dev has been run once (creates config/.env and dev accounts).
+SSMS end-to-end test suite (HTTP, real application, real PHPMailer -> local SMTP sink).
+Regression of the legislative modules + RBAC + the e-mail OTP login flow.
+Usage:  TZ=UTC python3 tests/run_tests.py        (needs: php, python3, requests; TZ=UTC because the app uses PHP's UTC date)
+See also tests/test_email_otp.py for the dedicated OTP / e-mail ownership / failure-mode scenarios.
 """
-import base64, hashlib, hmac, json, os, re, shutil, struct, subprocess, sys, tempfile, threading, time
+import hashlib, json, os, re, shutil, sys, threading, time
 import requests
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = 8099
-BASE = f"http://127.0.0.1:{PORT}"
-PW = "DevOnly#2026-ssms"
-OFFICE = (14.81053705, 121.046147894731)
-results = []
-
-def check(name, cond, detail=""):
-    results.append((name, bool(cond), detail))
-    print(("PASS " if cond else "FAIL ") + name + ("" if cond else f"  -> {detail}"))
-
-def totp(secret_b32, t=None, step=30):
-    key = base64.b32decode(secret_b32.replace(" ", "").upper() + "=" * (-len(secret_b32.replace(" ", "")) % 8))
-    c = int((t or time.time()) // step)
-    h = hmac.new(key, struct.pack(">Q", c), hashlib.sha1).digest()
-    o = h[19] & 15
-    return str((struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 10**6).zfill(6)
-
-LAST = {}
-def otp(secret):
-    """Next valid, never-before-used code: honours replay protection and the +/-1 step window."""
-    c = max(LAST.get(secret, 0) + 1, int(time.time() // 30))
-    while c > int(time.time() // 30) + 1: time.sleep(1)
-    LAST[secret] = c
-    return totp(secret, c * 30)
-
-class C:
-    """Browser-like client with its own cookie jar."""
-    def __init__(self):
-        self.s = requests.Session(); self.csrf = None; self.secret = None
-    def get(self, path, **kw):
-        r = self.s.get(BASE + "/" + path.lstrip("/"), allow_redirects=kw.pop("follow", True), **kw)
-        m = re.search(r'name="csrf" value="([a-f0-9]+)"', r.text)
-        if m: self.csrf = m.group(1)
-        return r
-    def post(self, path, data=None, csrf=True, **kw):
-        d = dict(data or {})
-        if csrf: d["csrf"] = self.csrf
-        r = self.s.post(BASE + "/" + path.lstrip("/"), data=d, allow_redirects=kw.pop("follow", True), **kw)
-        m = re.search(r'name="csrf" value="([a-f0-9]+)"', r.text)
-        if m: self.csrf = m.group(1)
-        return r
-    def sid(self): return self.s.cookies.get("SSMS_SID")
-
-def login(user, pw=PW, enroll=True):
-    c = C(); c.get("login.php")
-    r = c.post("login.php", {"username": user, "password": pw})
-    if "mfa_setup.php" in r.url and enroll:      # mandatory enrollment for privileged roles
-        c.post("mfa_setup.php", {"action": "begin"})
-        r = c.get("mfa_setup.php")
-        c.secret = re.search(r'id="manual-key"[^>]*>([A-Z2-7 ]+)<', r.text).group(1).replace(" ", "")
-        r = c.post("mfa_setup.php", {"action": "confirm", "code": otp(c.secret)})
-        c.codes = re.findall(r"<span>([A-Z2-7]{5}-[A-Z2-7]{5})</span>", r.text)
-    return c
-
-def php(code):
-    return subprocess.run(["php", "-r", code], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+import harness as H
+from harness import check, C, login, start_login, code_from, link_from, email_of, php, read, write, data_dir, PW, OFFICE, BASE
 
 def main():
-    tmp = tempfile.mkdtemp(prefix="ssms_test_")
-    data = os.path.join(tmp, "data"); os.makedirs(data)
-    for f in os.listdir(os.path.join(ROOT, "data")):
-        p = os.path.join(ROOT, "data", f)
-        if os.path.isfile(p) and f.endswith(".json"): shutil.copy(p, data)
-    for t in ("ratelimit",): open(os.path.join(data, t + ".json"), "w").write("{}")
-    env = dict(os.environ, SSMS_DATA_DIR=data, SSMS_ENV="development")
-    srv = subprocess.Popen(["php", "-S", f"127.0.0.1:{PORT}", "router.php"], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=open(os.path.join(tmp, "php.log"), "w"))
-    time.sleep(1.2)
+    H.SINK = H.Sink(H.SMTP_PORT)
+    srv = H.Server(tag="main")
+    err = None
     try:
         run()
+    except BaseException as e:           # never let a crash look like a clean pass
+        import traceback; traceback.print_exc(); err = e
     finally:
-        srv.terminate()
-        log = open(os.path.join(tmp, "php.log")).read()
-        warn = [l for l in log.splitlines() if re.search(r"Warning|Notice|Deprecated|Fatal|Parse error", l)]
+        srv.stop(); H.SINK.stop()
+        warn = [l for l in srv.log().splitlines() if re.search(r"Warning|Notice|Deprecated|Fatal|Parse error", l)]
         check("No PHP warnings/notices/fatals in server log during entire run", not warn, "\n".join(warn[:5]))
-        passed = sum(1 for r in results if r[1])
-        print(f"\n==== {passed}/{len(results)} passed ====")
-        shutil.rmtree(tmp, ignore_errors=True)
-        sys.exit(0 if passed == len(results) else 1)
+        ok = H.summary(); srv.cleanup()
+        sys.exit(0 if ok and err is None else 1)
+
+SINK = lambda: H.SINK
+CODES = []          # every OTP delivered during the run (used by the audit-log secrecy check)
+def sign_in_otp(user, pw=PW):
+    c, r, before = start_login(user, pw)
+    m = H.SINK.wait_new(email_of(user), before); code = code_from(m); CODES.append(code)
+    r = c.post("mfa.php", {"action": "verify", "code": code})
+    return c, r
 
 def run():
     # ---------------------------------------------------------------- A. basic / exposure
     c = C()
-    for p in ["login.php", "qr_login.php", "reset_password.php"]:
+    for p in ["login.php", "qr_login.php", "reset_password.php", "verify_email.php"]:
         check(f"A1 public page loads: {p}", c.get(p).status_code == 200)
-    for p in ["dashboard.php", "modules/scheduling.php", "modules/agenda.php", "modules/attendance.php", "modules/proceedings.php", "modules/minutes.php", "modules/tracking.php", "admin_users.php", "manage_devices.php", "audit_view.php", "settings.php", "mfa_setup.php"]:
+    for p in ["dashboard.php", "modules/scheduling.php", "modules/agenda.php", "modules/attendance.php", "modules/proceedings.php", "modules/minutes.php", "modules/tracking.php", "admin_users.php", "manage_devices.php", "audit_view.php", "settings.php", "my_security.php"]:
         r = c.get(p, follow=False)
         check(f"A2 unauthenticated redirected to login: {p}", r.status_code == 302 and "login.php" in r.headers.get("Location", ""), f"{r.status_code}")
     r = c.get("api/live_status.php?session_id=1", follow=False)
     check("A3 live_status API without login -> 401 JSON", r.status_code == 401 and r.json().get("success") is False)
-    for p in ["data/users.json", "data/audit.log", "config/.env", "config/.env.example", "includes/store.php", "tools/setup.php", "data/badges.json", "data/sessions.json"]:
+    for p in ["data/users.json", "data/audit.log", "config/.env", "config/.env.example", "includes/store.php", "tools/setup.php", "data/badges.json", "data/sessions.json", "data/otp_challenges.json", "vendor/phpmailer/phpmailer/src/PHPMailer.php", "composer.json"]:
         r = c.get(p, follow=False)
         check(f"A4 private file not served: {p}", r.status_code == 404 and "SSMS_APP_KEY" not in r.text and "password_hash" not in r.text, f"{r.status_code}")
     check("A5 login page has no demo credentials", "admin123" not in c.get("login.php").text)
@@ -116,68 +61,142 @@ def run():
     r = c.post("login.php", {"username": "councilor2_dev", "password": PW})
     check("B4 account throttled after repeated failures (even correct password blocked)", "Too many failed attempts" in r.text)
 
-    # ---------------------------------------------------------------- C. MFA lifecycle
+
+    # ---------------------------------------------------------------- C. e-mail OTP login lifecycle
+    ADM = "admin_dev"; M = lambda u: H.SINK.count(email_of(u))
     a = C(); sid0 = (a.get("login.php"), a.sid())[1]
-    r = a.post("login.php", {"username": "admin_dev", "password": PW})
-    check("C1 privileged account without MFA is forced to enrollment", "mfa_setup.php" in r.url and "required for your account" in r.text)
-    check("C2 session id regenerated at login (fixation defence)", a.sid() != sid0)
-    r = a.get("modules/scheduling.php", follow=False)
-    check("C3 enrollment-only session cannot reach modules", r.status_code == 302 and "mfa_setup.php" in r.headers["Location"])
-    a.post("mfa_setup.php", {"action": "begin"}); r = a.get("mfa_setup.php")
-    secret = re.search(r'id="manual-key"[^>]*>([A-Z2-7 ]+)<', r.text).group(1).replace(" ", "")
-    check("C4 enrollment page shows otpauth URI and 160-bit secret", "otpauth://totp/" in r.text and len(secret) == 32)
-    check("C5 secret not placed in a URL", secret not in r.url)
-    r = a.post("mfa_setup.php", {"action": "confirm", "code": "000000"})
-    check("C6 enrollment rejects wrong code", "did not match" in r.text)
-    r = a.post("mfa_setup.php", {"action": "confirm", "code": otp(secret)})
-    codes = re.findall(r"<span>([A-Z2-7]{5}-[A-Z2-7]{5})</span>", r.text)
-    check("C7 correct code enables MFA (Python TOTP == PHP TOTP) and shows 10 recovery codes once", len(codes) == 10)
-    r = a.get("mfa_setup.php")
-    check("C8 recovery codes are not shown again", not re.findall(r"<span>([A-Z2-7]{5}-[A-Z2-7]{5})</span>", r.text))
-    raw = open(os.path.join(data_dir(), "users.json")).read()
-    check("C9 TOTP secret & recovery codes not stored in plaintext", secret not in raw and not any(cd.replace("-", "") in raw for cd in codes))
-    a.post("logout.php"); 
-    b = C(); b.get("login.php")
-    r = b.post("login.php", {"username": "admin_dev", "password": PW})
-    check("C10 password OK + MFA enabled -> MFA challenge, not access", "mfa.php" in r.url)
-    r = b.get("dashboard.php", follow=False)
-    check("C11 password-only (pending) state cannot open protected page", r.status_code == 302 and "login.php" in r.headers["Location"])
-    r = b.get("api/live_status.php?session_id=1", follow=False)
-    check("C12 pending state cannot call APIs", r.status_code == 401)
-    r = b.post("mfa.php", {"mode": "totp", "code": "123456" if totp(secret) != "123456" else "654321"})
-    check("C13 wrong OTP rejected", "not valid" in r.text and "mfa.php" in r.url)
-    sid_before = b.sid()
-    used = otp(secret); r = b.post("mfa.php", {"mode": "totp", "code": used})
-    check("C14 correct OTP grants session and goes to dashboard", "dashboard.php" in r.url and r.status_code == 200, r.url)
-    check("C15 session id regenerated after MFA", b.sid() != sid_before)
+    n_sec = M("secretary_dev"); n_adm = M(ADM)
+    r = a.post("login.php", {"username": ADM, "password": PW})
+    check("C1 mandatory role: correct password leads to the code page, not the dashboard", "mfa.php" in r.url and "Check your e-mail" in r.text, r.url)
+    check("C2 session id regenerated at the password step (fixation defence)", a.sid() != sid0)
+    m = H.SINK.wait_new(email_of(ADM), n_adm); code1 = code_from(m); CODES.append(code1)
+    check("C3 the code was e-mailed to THAT account's own address, and only there", m is not None and M("secretary_dev") == n_sec and all(x["to"] == email_of(ADM) for x in H.SINK.mail[-1:]))
+    check("C4 e-mail identifies the system, states expiry and warns not to share", "Session and Legislative Meeting Management System" in m["body"] and "expires in 5 minute" in m["body"] and "Do not share" in m["body"], m["body"][:200])
+    check("C5 code page shows the MASKED address only; code never in the HTTP response", email_of(ADM) not in r.text and "@d" in r.text and "*" in r.text and code1 not in r.text)
+    for p, want in [("dashboard.php", "login.php"), ("modules/scheduling.php", "login.php"), ("admin_users.php", "login.php"), ("my_security.php", "login.php")]:
+        rr = a.get(p, follow=False)
+        check(f"C6 pending (password-only) state cannot open {p}", rr.status_code == 302 and want in rr.headers["Location"], rr.status_code)
+    check("C7 pending state cannot call APIs", a.get("api/live_status.php?session_id=1", follow=False).status_code == 401)
+    r = a.post("mfa.php", {"action": "verify", "code": "000000" if code1 != "000000" else "111111"})
+    check("C8 wrong code rejected, attempts counted", "not correct" in r.text and "4 attempt(s) left" in r.text and "mfa.php" in r.url, r.text[:100])
+    r = a.post("mfa.php", {"action": "verify", "code": "12ab56"})
+    check("C9 malformed code rejected without spending an attempt", "6-digit" in r.text)
+    r = a.post("mfa.php", {"action": "verify", "code": code1, "role": "sysadmin"})
+    check("C10 unexpected request fields are rejected (400)", r.status_code == 400)
+    r = a.post("mfa.php", {"action": "verify", "code": code1}, csrf=False)
+    check("C11 code submission without CSRF token -> 403", r.status_code == 403)
+    sid_before = a.sid()
+    r = a.post("mfa.php", {"action": "verify", "code": code1})
+    check("C12 correct code grants the session and opens the dashboard", "dashboard.php" in r.url and r.status_code == 200, r.url)
+    check("C13 session id regenerated again after the code", a.sid() != sid_before)
+    check("C14 role comes from server data: sysadmin reaches user admin", a.get("admin_users.php").status_code == 200)
+    a.post("logout.php")
+    check("C15 logout destroys the session server-side", a.get("dashboard.php", follow=False).status_code == 302)
+    # reuse
+    b, r, before = start_login(ADM); m2 = H.SINK.wait_new(email_of(ADM), before); code2 = code_from(m2); CODES.append(code2)
+    r = b.post("mfa.php", {"action": "verify", "code": code1})
+    check("C16 an already-used code is rejected on a new login", "dashboard.php" not in r.url and "not correct" in r.text or "No valid code" in r.text, r.text[:100])
+    r = b.post("mfa.php", {"action": "verify", "code": code2})
+    check("C17 the new login's own code works", "dashboard.php" in r.url)
     b.post("logout.php")
-    b = C(); b.get("login.php"); b.post("login.php", {"username": "admin_dev", "password": PW})
-    r = b.post("mfa.php", {"mode": "totp", "code": used})
-    check("C16 replay of an already-used OTP is rejected", "dashboard.php" not in r.url)
-    r = b.post("mfa.php", {"mode": "recovery", "code": codes[0]})
-    check("C17 valid recovery code signs in", "dashboard.php" in r.url)
+    # raw storage
+    raw = open(os.path.join(data_dir(), "otp_challenges.json")).read()
+    check("C18 OTP codes are not stored in plaintext (keyed hash only)", not any(c in raw for c in CODES if re.search(r'"' + c + '"', raw)) and '"code_h"' in raw and not re.search(r'"code"\s*:', raw))
+    # resend + cooldown + supersede
+    b, r, before = start_login(ADM); mA = H.SINK.wait_new(email_of(ADM), before); codeA = code_from(mA); CODES.append(codeA)
+    r = b.post("mfa.php", {"action": "resend"})
+    check("C19 resend inside the cooldown is refused (no new e-mail)", "Please wait" in r.text and M(ADM) == before + 1, r.text[:100])
+    time.sleep(5.3)
+    r = b.post("mfa.php", {"action": "resend"}); mB = H.SINK.wait_new(email_of(ADM), before + 1); codeB = code_from(mB); CODES.append(codeB)
+    check("C20 resend after the cooldown e-mails a new code", mB is not None and codeB != codeA)
+    r = b.post("mfa.php", {"action": "verify", "code": codeA})
+    check("C21 a resend invalidates the previous code (even though it is still unexpired)", "dashboard.php" not in r.url, r.url)
+    r = b.post("mfa.php", {"action": "verify", "code": codeB})
+    check("C22 the newest code works", "dashboard.php" in r.url)
     b.post("logout.php")
-    b = C(); b.get("login.php"); b.post("login.php", {"username": "admin_dev", "password": PW})
-    r = b.post("mfa.php", {"mode": "recovery", "code": codes[0]})
-    check("C18 reused recovery code rejected", "dashboard.php" not in r.url)
-    r = b.post("mfa.php", {"mode": "recovery", "code": "AAAAA-AAAAA"})
-    check("C19 invalid recovery code rejected", "dashboard.php" not in r.url)
-    # brute force: pending killed after max tries
-    for i in range(6): r = b.post("mfa.php", {"mode": "totp", "code": "%06d" % (111111 + i)})
-    r = b.get("mfa.php", follow=False)
-    check("C20 MFA brute force: pending state destroyed after repeated failures", r.status_code == 302 and "login.php" in r.headers["Location"], f"{r.status_code}")
-    open(os.path.join(data_dir(), "ratelimit.json"), "w").write("{}")   # lift the throttle the brute-force test deliberately triggered
-    # expired pending
-    b = C(); b.get("login.php"); b.post("login.php", {"username": "secretary_dev", "password": PW})  # secretary -> enroll path (no pending); use admin2 instead
-    b2 = login("admin2_dev"); b2.post("logout.php")
-    b = C(); b.get("login.php"); b.post("login.php", {"username": "admin2_dev", "password": PW})
-    sess_file = None
-    check("C21 pending state is session-bound (cookie-less client has none)", C().get("mfa.php", follow=False).status_code == 302)
+    # attempt limit
+    b, r, before = start_login(ADM); mC = H.SINK.wait_new(email_of(ADM), before); codeC = code_from(mC); CODES.append(codeC)
+    wrong = [x for x in ("000001", "000002", "000003", "000004", "000005", "000006") if x != codeC][:5]
+    for w in wrong: r = b.post("mfa.php", {"action": "verify", "code": w})
+    check("C23 five wrong codes: the challenge dies and the pending login is destroyed", "login.php" in r.url and "Too many incorrect codes" in r.text, r.url)
+    r = b.post("mfa.php", {"action": "verify", "code": codeC})
+    check("C24 after the attempt limit even the CORRECT code is useless", "dashboard.php" not in r.url and b.get("dashboard.php", follow=False).status_code == 302)
+    ch = read("otp_challenges")
+    check("C25 exhausted challenge is marked as such server-side", ch and ch[-1]["status"] == "exhausted", ch[-1:] )
+    write("ratelimit", {})
+    # expiry
+    b, r, before = start_login(ADM); mD = H.SINK.wait_new(email_of(ADM), before); codeD = code_from(mD); CODES.append(codeD)
+    ch = read("otp_challenges"); ch[-1]["expires_at"] = int(time.time()) - 1; ch[-1]["created_at"] -= 400; write("otp_challenges", ch)
+    r = b.post("mfa.php", {"action": "verify", "code": codeD})
+    check("C26 an expired code is rejected", "expired" in r.text and "dashboard.php" not in r.url, r.text[:120])
+    time.sleep(5.3)
+    r = b.post("mfa.php", {"action": "resend"}); mE = H.SINK.wait_new(email_of(ADM), before + 1); codeE = code_from(mE); CODES.append(codeE)
+    r = b.post("mfa.php", {"action": "verify", "code": codeE})
+    check("C27 a fresh code after expiry works", "dashboard.php" in r.url)
+    b.post("logout.php")
+    # cross-account / cross-login isolation
+    x, rx, bx = start_login("admin_dev"); y, ry, by = start_login("secretary_dev")
+    cx = code_from(H.SINK.wait_new(email_of("admin_dev"), bx)); cy = code_from(H.SINK.wait_new(email_of("secretary_dev"), by)); CODES.extend([cx, cy])
+    r = y.post("mfa.php", {"action": "verify", "code": cx})
+    check("C28 a code issued to one account cannot complete another account's login", "dashboard.php" not in r.url and y.get("dashboard.php", follow=False).status_code == 302)
+    x2, rx2, bx2 = start_login("admin_dev"); cx2 = code_from(H.SINK.wait_new(email_of("admin_dev"), bx2)); CODES.append(cx2)
+    r = x.post("mfa.php", {"action": "verify", "code": cx})
+    check("C29 a newer login of the same account cancels the older pending login's code", "dashboard.php" not in r.url)
+    r = x2.post("mfa.php", {"action": "verify", "code": cx})
+    check("C30 a code cannot be replayed into a different pending login of the same account", "dashboard.php" not in r.url)
+    r = x2.post("mfa.php", {"action": "verify", "code": cx2}); check("C31 ...while that login's own code still works", "dashboard.php" in r.url)
+    x2.post("logout.php")
+    # cancel
+    z, rz, bz = start_login("admin_dev"); cz = code_from(H.SINK.wait_new(email_of("admin_dev"), bz)); CODES.append(cz)
+    z.post("logout.php"); r = z.post("mfa.php", {"action": "verify", "code": cz})
+    check("C32 'Cancel' on the code page ends the pending login and cancels its code", "dashboard.php" not in r.url and z.get("dashboard.php", follow=False).status_code == 302)
+    write("ratelimit", {})
+    # policy
+    n = M("councilor_dev"); cc = C(); cc.get("login.php"); r = cc.post("login.php", {"username": "councilor_dev", "password": PW})
+    check("C33 optional role (policy 'optional', not opted in): password-only sign-in, no code sent", "dashboard.php" in r.url and M("councilor_dev") == n)
+    r = cc.post("my_security.php", {"action": "enable_otp", "password": PW})
+    check("C34 optional role can opt in (needs password) and is signed out to prove the code path", "login.php" in r.url and "turned on" in r.text.lower() or "sign in again" in r.text.lower(), r.text[:100])
+    cc2, r2 = sign_in_otp("councilor_dev")
+    check("C35 after opting in, sign-in requires the e-mailed code", "dashboard.php" in r2.url)
+    r = cc2.post("my_security.php", {"action": "disable_otp", "password": "wrong"})
+    check("C36 turning it off needs the current password", "incorrect" in r.text)
+    r = cc2.post("my_security.php", {"action": "disable_otp", "password": PW}); cc2.post("logout.php")
+    cc3 = C(); cc3.get("login.php"); r = cc3.post("login.php", {"username": "councilor_dev", "password": PW})
+    check("C37 opted-out again: password-only", "dashboard.php" in r.url); cc3.post("logout.php")
+    ad2 = login(ADM); r = ad2.post("my_security.php", {"action": "disable_otp", "password": PW})
+    check("C38 mandatory role cannot turn the code requirement off", "mandatory" in r.text)
+    r = ad2.post("my_security.php", {"action": "enable_otp", "password": PW})
+    check("C39 ...nor is a self-service switch needed/possible to change policy", ad2.get("dashboard.php", follow=False).status_code == 200)
+    ad2.post("logout.php")
+    # unverified / malformed
+    users = read("users"); sec_row = [u for u in users if u["username"] == "secretary_dev"][0]
+    sec_row["email_verified"] = False; write("users", users); n = M("secretary_dev")
+    s1 = C(); s1.get("login.php"); r = s1.post("login.php", {"username": "secretary_dev", "password": PW})
+    check("C40 mandatory role with an UNVERIFIED address: refused, explained, nothing e-mailed", "login.php" in r.url and "verified e-mail" in r.text and M("secretary_dev") == n, r.url)
+    check("C41 ...and no route to protected content exists", s1.get("dashboard.php", follow=False).status_code == 302 and s1.get("modules/agenda.php", follow=False).status_code == 302)
+    sec_row["email_verified"] = True; sec_row["email"] = None; write("users", users)
+    s1 = C(); s1.get("login.php"); r = s1.post("login.php", {"username": "secretary_dev", "password": PW})
+    check("C42 mandatory role with NO address at all: refused", "login.php" in r.url and "verified e-mail" in r.text)
+    sec_row["email"] = email_of("secretary_dev"); write("users", users)
+    v_row = [u for u in users if u["username"] == "viewer_dev"][0]; v_row["role"] = "hacker"; write("users", users)
+    s1 = C(); s1.get("login.php"); r = s1.post("login.php", {"username": "viewer_dev", "password": PW})
+    check("C43 malformed/unknown role: sign-in refused", "dashboard.php" not in r.url and s1.get("dashboard.php", follow=False).status_code == 302)
+    v_row["role"] = "viewer"; write("users", users)
+    # config floor
+    dd = data_dir()
+    for val in ["viewer", "", "garbage,,nonsense", "sysadmin"]:
+        out = php("define('SSMS_DATA_DIR','%s');require 'includes/bootstrap.php';echo json_encode(ssms_mfa_required_roles());" % dd, {"SSMS_MFA_REQUIRED_ROLES": val})
+        got = json.loads(out)
+        check(f"C44 config cannot remove mandatory roles (SSMS_MFA_REQUIRED_ROLES='{val}')", all(r in got for r in ("sysadmin", "secretary", "presiding")), out)
+    out = php("define('SSMS_DATA_DIR','%s');require 'includes/bootstrap.php';echo ssms_otp_ttl(),',',ssms_otp_cooldown(),',',ssms_otp_max_tries();" % dd, {"SSMS_OTP_RESEND_COOLDOWN_SEC": "", "SSMS_OTP_EXPIRY_MIN": "", "SSMS_OTP_MAX_ATTEMPTS": ""})
+    check("C45 defaults: 5-minute expiry, 60-second resend cooldown, 5 attempts", out == "300,60,5", out)
+    out = php("define('SSMS_DATA_DIR','%s');require 'includes/bootstrap.php';echo json_encode([ssms_mfa_gate(['role'=>'sysadmin','email'=>null,'email_verified'=>false]), ssms_mfa_gate(['role'=>'secretary','email'=>'a@b.co','email_verified'=>true]), ssms_mfa_gate(['role'=>'viewer','email'=>null]), ssms_mfa_gate(['role'=>'']), ssms_mfa_gate([])]);" % dd, {"SSMS_MFA_ORDINARY_POLICY": "optional"})
+    check("C46 policy gate fails closed (blocked / otp / none / blocked / blocked)", out == '["blocked","otp","none","blocked","blocked"]', out)
+    check("C47 TOTP/authenticator routes no longer exist", C().get("mfa_setup.php", follow=False).status_code == 404 and not os.path.exists(os.path.join(H.ROOT, "includes", "mfa.php")))
+    write("ratelimit", {})
+
     # ---------------------------------------------------------------- D. RBAC matrix
-    sec = login("secretary_dev"); pres = login("presiding_dev"); adm = a2 = login("admin_dev", enroll=False)
-    # admin was enrolled earlier by 'a'; re-login with real MFA:
-    adm = C(); adm.get("login.php"); adm.post("login.php", {"username": "admin_dev", "password": PW})
-    adm.post("mfa.php", {"mode": "totp", "code": otp(secret)}); adm.get("dashboard.php")
+    sec = login("secretary_dev"); pres = login("presiding_dev"); adm = login("admin_dev")
     coun = login("councilor_dev"); doc = login("docstaff_dev"); view = login("viewer_dev")
     check("D0 all six role accounts can sign in", all("Dashboard" in x.get("dashboard.php").text or "Dashboard" in x.get("dashboard.php").text for x in [sec, pres, adm, coun, doc, view]))
     pages = ["modules/scheduling.php", "modules/agenda.php", "modules/attendance.php", "modules/proceedings.php", "modules/minutes.php", "modules/tracking.php", "admin_users.php", "manage_devices.php", "audit_view.php", "settings.php"]
@@ -405,26 +424,47 @@ def run():
     check("F12 an administrator can deactivate another while one remains usable", not [u for u in users if u["username"] == "admin2_dev"][0]["active"])
     # create admin2 back & test last-admin protection by trying via second session is impossible; check demotion of 'only other admin'
     adm.post("admin_users.php", {"action": "activate", "id": U["admin2_dev"]["id"], "confirm_password": PW})
-    # MFA reset needs two admins
+
+    # e-mail change of a privileged account needs two different administrators
     pres_id = U["presiding_dev"]["id"]
-    r = adm.post("admin_users.php", {"action": "request_mfa_reset", "id": pres_id, "confirm_password": PW, "reason": "lost phone, identity verified in person"})
-    check("F14 admin can REQUEST an MFA reset (not perform it)", "reset requested" in r.text.lower())
-    r = adm.post("admin_users.php", {"action": "approve_mfa_reset", "id": pres_id, "confirm_password": PW})
-    check("F15 requester cannot approve own MFA reset", "cannot approve your own" in r.text)
-    still = [u for u in json.load(open(os.path.join(data_dir(), "users.json"))) if u["id"] == pres_id][0]
-    check("F16 MFA stayed enabled", still["mfa"]["enabled"] is True)
-    a2 = login("admin2_dev"); a2.get("login.php")
-    a2c = C(); a2c.get("login.php"); a2c.post("login.php", {"username": "admin2_dev", "password": PW})
-    if "mfa_setup" in a2c.get("dashboard.php", follow=False).headers.get("Location", "") or True:
-        pass
-    # admin2 was enrolled by login(); use its secret
-    a2s = a2.secret
-    a2c.post("mfa.php", {"mode": "totp", "code": otp(a2s)}); a2c.get("admin_users.php")
-    r = a2c.post("admin_users.php", {"action": "approve_mfa_reset", "id": pres_id, "confirm_password": PW})
-    check("F17 a DIFFERENT administrator approves the MFA reset", "MFA reset" in r.text and not [u for u in json.load(open(os.path.join(data_dir(), "users.json"))) if u["id"] == pres_id][0]["mfa"]["enabled"])
-    check("F18 reset ends the user's sessions", pres.get("dashboard.php", follow=False).status_code == 302)
-    pres = login("presiding_dev")   # re-enrolls (mandatory)
-    check("F19 after reset the privileged user must re-enroll, then regains access", pres.get("modules/minutes.php").status_code == 200)
+    r = adm.post("admin_users.php", {"action": "set_email", "id": pres_id, "confirm_password": PW, "new_email": "new.presiding@dev.invalid", "reason": "old mailbox closed", "revoke_current": "1"})
+    check("F14 changing a privileged account's e-mail is only REQUESTED by one admin", "DIFFERENT administrator" in r.text and [u for u in read("users") if u["id"] == pres_id][0]["email"] == email_of("presiding_dev"))
+    r = adm.post("admin_users.php", {"action": "approve_email_change", "id": pres_id, "confirm_password": PW})
+    check("F15 requester cannot approve own e-mail change", "cannot approve your own" in r.text)
+    check("F16 trusted address unchanged meanwhile", [u for u in read("users") if u["id"] == pres_id][0]["email"] == email_of("presiding_dev"))
+    a2c = login("admin2_dev"); a2c.get("admin_users.php")
+    n_new = H.SINK.count("new.presiding@dev.invalid")
+    r = a2c.post("admin_users.php", {"action": "approve_email_change", "id": pres_id, "confirm_password": PW})
+    row = [u for u in read("users") if u["id"] == pres_id][0]
+    check("F17 a DIFFERENT administrator approves: old address revoked, new one only PENDING, confirmation e-mailed to it", row["email"] is None and not row["email_verified"] and row["pending_email"]["address"] == "new.presiding@dev.invalid" and H.SINK.count("new.presiding@dev.invalid") == n_new + 1, str(row)[:200])
+    check("F18 revocation ends the user's sessions", pres.get("dashboard.php", follow=False).status_code == 302)
+    p1 = C(); p1.get("login.php"); r = p1.post("login.php", {"username": "presiding_dev", "password": PW})
+    check("F19 until the new address is confirmed the Presiding Officer cannot sign in at all", "login.php" in r.url and p1.get("modules/minutes.php", follow=False).status_code == 302)
+    ev = link_from(H.SINK.last("new.presiding@dev.invalid"), "verify_email.php")
+    pv = C(); r = pv.get(ev.replace(BASE + "/", ""))
+    check("F20 verification link only DISPLAYS a confirm page (GET does not verify); token moved out of the URL", "token=" not in r.url and "Yes, this is my address" in r.text and [u for u in read("users") if u["id"] == pres_id][0]["email"] is None)
+    r = pv.post("verify_email.php", {})
+    check("F21 pressing confirm trusts the new address", "E-mail confirmed" in r.text and [u for u in read("users") if u["id"] == pres_id][0]["email"] == "new.presiding@dev.invalid")
+    pv2 = C(); r = pv2.get(ev.replace(BASE + "/", ""))
+    check("F22 verification link is single-use", "Link not valid" in r.text and "Yes, this is my address" not in r.text)
+    U_pres_mail = "new.presiding@dev.invalid"
+    b4 = H.SINK.count(U_pres_mail); p2 = C(); p2.get("login.php"); r = p2.post("login.php", {"username": "presiding_dev", "password": PW})
+    mm = H.SINK.wait_new(U_pres_mail, b4); r = p2.post("mfa.php", {"action": "verify", "code": code_from(mm)}); CODES.append(code_from(mm))
+    check("F23 afterwards the code goes to the NEW address and the user regains access", "dashboard.php" in r.url and p2.get("modules/minutes.php").status_code == 200)
+    pres = p2
+    # restore the dev address so later sections keep working
+    users = read("users"); [u.update(email=email_of("presiding_dev")) for u in users if u["id"] == pres_id]; write("users", users)
+    # non-privileged target: applied directly but still needs proof of ownership
+    r = adm.post("admin_users.php", {"action": "set_email", "id": U["viewer_dev"]["id"], "confirm_password": PW, "new_email": "viewer.new@dev.invalid", "reason": "typo fix"})
+    row = [u for u in read("users") if u["username"] == "viewer_dev"][0]
+    check("F24 ordinary account: new address is PENDING until its owner confirms (old stays trusted)", row["pending_email"]["address"] == "viewer.new@dev.invalid" and row["email"] == email_of("viewer_dev"))
+    r = adm.post("admin_users.php", {"action": "set_email", "id": U["viewer_dev"]["id"], "confirm_password": PW, "new_email": email_of("secretary_dev"), "reason": "dup"})
+    check("F25 an address already used by another account is refused", "already belongs" in r.text)
+    users = read("users"); [u.update(pending_email=None) for u in users if u["username"] == "viewer_dev"]; write("users", users)
+    r = adm.post("admin_users.php", {"action": "set_email", "id": U["viewer_dev"]["id"], "confirm_password": PW, "new_email": "bad@@x", "reason": "x"})
+    check("F26 malformed address refused", "valid e-mail" in r.text)
+    r = view.post("admin_users.php", {"action": "set_email", "id": U["viewer_dev"]["id"], "confirm_password": PW, "new_email": "evil@dev.invalid", "reason": "x"})
+    check("F27 non-administrators cannot change anyone's e-mail (403)", r.status_code == 403)
 
     # ---------------------------------------------------------------- G. QR login / devices
     a2c.get("manage_devices.php")
@@ -464,12 +504,15 @@ def run():
     check("G12 first-bind after the enrollment window is refused", qr(C(), tok2, "dev-" + "c" * 36).status_code == 401)
     # QR + MFA (presiding is MFA-required & enrolled)
     tok3 = issue("presiding_dev")
+    nq = H.SINK.count(email_of("presiding_dev"))
     qp = C(); r = qr(qp, tok3, "dev-" + "d" * 36); j = r.json()
-    check("G13 QR login for an MFA account stops at the MFA challenge", j["success"] and j["next"] == "mfa.php")
+    check("G13 QR login for an MFA account stops at the code challenge", j["success"] and j["next"] == "mfa.php")
     check("G14 ...and grants NO access before MFA (QR does not bypass MFA)", qp.get("dashboard.php", follow=False).status_code == 302 and qp.get("modules/minutes.php", follow=False).status_code == 302)
     # presiding was re-enrolled by login() above -> secret in pres.secret
-    r = qp.post("mfa.php", {"mode": "totp", "code": otp(pres.secret)})
-    check("G15 QR + valid OTP completes login", "dashboard.php" in r.url and qp.get("modules/minutes.php").status_code == 200)
+    qp.get("mfa.php")
+    mq = H.SINK.wait_new(email_of("presiding_dev"), nq); CODES.append(code_from(mq))
+    r = qp.post("mfa.php", {"action": "verify", "code": code_from(mq)})
+    check("G15 QR + valid e-mailed code completes login", "dashboard.php" in r.url and qp.get("modules/minutes.php").status_code == 200)
     # outsider JSON CSRF
     r = requests.post(BASE + "/api/qr_login.php", data="token=x", headers={"Content-Type": "application/x-www-form-urlencoded"})
     check("G16 QR API rejects non-JSON (login-CSRF) requests", r.status_code == 415)
@@ -480,8 +523,10 @@ def run():
 
     # ---------------------------------------------------------------- H. password reset
     a2c.get("admin_users.php")
-    r = a2c.post("admin_users.php", {"action": "issue_reset", "id": U["viewer_dev"]["id"], "confirm_password": PW})
-    link = re.search(r"reset_password\.php\?token=([a-f0-9]{64})", r.text).group(1)
+    nv = H.SINK.count(email_of("viewer_dev"))
+    r = a2c.post("admin_users.php", {"action": "send_link", "id": U["viewer_dev"]["id"], "confirm_password": PW})
+    check("H0 password link is E-MAILED to the account holder and never shown to the administrator", not re.search(r"reset_password\.php\?token=", r.text) and H.SINK.wait_new(email_of("viewer_dev"), nv) is not None)
+    link = re.search(r"reset_password\.php\?token=([a-f0-9]{64})", H.SINK.last(email_of("viewer_dev"))["body"]).group(1)
     v = C(); r = v.get(f"reset_password.php?token={link}")
     check("H1 reset token is moved out of the URL (session-held)", "token=" not in r.url and "Choose a password" in r.text)
     r = v.post("reset_password.php", {"new": "short", "confirm": "short"})
@@ -489,9 +534,8 @@ def run():
     NEW = "A-Brand-New-Passphrase-77"
     r = v.post("reset_password.php", {"new": NEW, "confirm": NEW})
     check("H3 valid reset completes", "Password set" in r.text)
-    v2 = C(); v2.get(f"reset_password.php?token={link}")
-    r = v2.post("reset_password.php", {"new": NEW + "x", "confirm": NEW + "x"})
-    check("H4 reset token is single-use", "invalid, expired, or already used" in r.text)
+    v2 = C(); r = v2.get(f"reset_password.php?token={link}")
+    check("H4 reset token is single-use", "Link not valid" in r.text and 'name="new"' not in r.text)
     v3 = C(); v3.get("login.php"); r = v3.post("login.php", {"username": "viewer_dev", "password": NEW})
     check("H5 new password works; old one no longer does", "dashboard.php" in r.url)
     v3.post("logout.php")
@@ -501,14 +545,14 @@ def run():
     out = php("define('SSMS_DATA_DIR','%s');require 'includes/config.php';require 'includes/store.php';require 'includes/audit.php';[$ok,$b]=ssms_audit_verify();echo $ok?'INTACT':'BROKEN';" % data_dir())
     check("I1 audit log hash chain verifies", out == "INTACT", out)
     log = open(os.path.join(data_dir(), "audit.log")).read()
-    for needle in [secret, codes[1], PW, NEW, tok, dsecret]:
+    for needle in CODES + [PW, NEW, tok, dsecret, link]:
         if needle in log: check("I2 audit log contains no secrets/passwords/tokens/OTPs", False, needle[:6]); break
     else: check("I2 audit log contains no secrets/passwords/tokens/OTPs", True)
     acts = set(json.loads(l)["action"] for l in log.splitlines())
-    need = {"auth.login", "mfa.enrolled", "mfa.challenge", "mfa.recovery_code_used", "user.role_changed", "session.created", "session.status_changed", "attendance.recorded", "attendance.corrected", "agenda.finalized", "proceedings.amended", "minutes.generated", "minutes.approved", "minutes.published", "device.bound", "badge.revoked", "mfa.reset_approved", "authz.denied", "settings.changed"}
+    need = {"auth.login", "otp.issue", "otp.verify", "email.verified", "email.change_requested", "email.change_approved", "user.role_changed", "session.created", "session.status_changed", "attendance.recorded", "attendance.corrected", "agenda.finalized", "proceedings.amended", "minutes.generated", "minutes.approved", "minutes.published", "device.bound", "badge.revoked", "authz.denied", "settings.changed"}
     check("I3 audit covers required event types", need <= acts, str(need - acts))
     # tamper detection
-    lines = log.splitlines(); lines[3] = lines[3].replace('"ok"', '"hax"'); 
+    lines = log.splitlines(); k = [i for i, l in enumerate(lines) if '"result":"ok"' in l][2]; lines[k] = lines[k].replace('"result":"ok"', '"result":"hax"'); 
     open(os.path.join(data_dir(), "audit.log"), "w").write("\n".join(lines) + "\n")
     out = php("define('SSMS_DATA_DIR','%s');require 'includes/config.php';require 'includes/store.php';require 'includes/audit.php';[$ok,$b]=ssms_audit_verify();echo $ok?'INTACT':'BROKEN';" % data_dir())
     check("I4 tampering with an audit entry is detected", out == "BROKEN", out)
@@ -532,13 +576,6 @@ def run():
     open(p, "w").write(good)
     check("I7 service recovers once the file is restored", sec.get("modules/attendance.php").status_code == 200)
 
-def data_dir(): return DATA
-DATA = None
+
 if __name__ == "__main__":
-    # data dir is created in main(); expose via global before run()
-    _orig = tempfile.mkdtemp
-    def _mk(prefix=""):
-        global DATA
-        d = _orig(prefix=prefix); DATA = os.path.join(d, "data"); return d
-    tempfile.mkdtemp = _mk
     main()

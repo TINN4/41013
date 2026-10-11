@@ -14,6 +14,8 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/rbac.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/domain.php';
+require_once __DIR__ . '/useremail.php';
+require_once __DIR__ . '/otp.php';
 
 if (ssms_cfg('SSMS_ENV', 'development') === 'production') {
     ini_set('display_errors', '0');
@@ -151,38 +153,55 @@ function ssms_user_by_username(string $u): ?array {
     return null;
 }
 
-/** MFA obligation for this user: 'required' | 'optional'. */
+/**
+ * MFA policy. Mandatory roles are a built-in floor: configuration can ADD roles but can never remove
+ * these, so a typo or empty SSMS_MFA_REQUIRED_ROLES cannot silently switch MFA off for privileged accounts.
+ */
+const SSMS_MFA_MANDATORY_ROLES = ['sysadmin', 'secretary', 'presiding'];
+function ssms_mfa_required_roles(): array {
+    $extra = array_filter(array_map('trim', explode(',', (string)ssms_cfg('SSMS_MFA_REQUIRED_ROLES', ''))), 'ssms_valid_role');
+    return array_values(array_unique(array_merge(SSMS_MFA_MANDATORY_ROLES, $extra)));
+}
+/** MFA obligation for this user: 'required' | 'optional'. Unknown/malformed role => required (and login is refused elsewhere). */
 function ssms_mfa_policy(array $user): string {
-    $req = array_map('trim', explode(',', ssms_cfg('SSMS_MFA_REQUIRED_ROLES', 'sysadmin,secretary,presiding')));
-    if (in_array($user['role'], $req, true)) return 'required';
+    $role = (string)($user['role'] ?? '');
+    if (!ssms_valid_role($role) || in_array($role, ssms_mfa_required_roles(), true)) return 'required';
     return ssms_cfg('SSMS_MFA_ORDINARY_POLICY', 'optional') === 'required' ? 'required' : 'optional';
 }
-function ssms_mfa_enabled(array $user): bool { return !empty($user['mfa']['enabled']); }
+function ssms_mfa_optin(array $user): bool { return !empty($user['mfa']['email_otp']); }
 
-/** Grace period for ordinary accounts when policy is required. */
-function ssms_mfa_enrollment_overdue(array $user): bool {
-    if (ssms_mfa_enabled($user) || ssms_mfa_policy($user) !== 'required') return false;
-    $grace = (int)ssms_cfg('SSMS_MFA_GRACE_DAYS', '0');
-    if (in_array($user['role'], array_map('trim', explode(',', ssms_cfg('SSMS_MFA_REQUIRED_ROLES', ''))), true)) return true;
-    return strtotime($user['created_at'] ?? 'now') + $grace * 86400 <= time();
+/**
+ * What the server demands for this account at sign-in, from trusted stored data only:
+ *   'otp'     e-mail code required        'none'  password (or badge) alone is the configured policy
+ *   'blocked' sign-in refused: MFA applies but there is no verified address to send a code to (or the role is invalid)
+ */
+function ssms_mfa_gate(array $user): string {
+    if (!ssms_valid_role((string)($user['role'] ?? ''))) return 'blocked';
+    $verified = ssms_user_email_verified($user);
+    $mandatory = in_array($user['role'], ssms_mfa_required_roles(), true);
+    if ($mandatory || ssms_mfa_optin($user)) return $verified ? 'otp' : 'blocked';
+    if (ssms_mfa_policy($user) === 'required') {                          // ordinary role, policy "required": grace period only
+        if ($verified) return 'otp';
+        $grace = ssms_cfg_int('SSMS_MFA_GRACE_DAYS', 0, 0, 365);
+        return strtotime((string)($user['created_at'] ?? 'now')) + $grace * 86400 > time() ? 'none' : 'blocked';
+    }
+    return 'none';
 }
+function ssms_mfa_enabled(array $user): bool { return ssms_mfa_gate($user) === 'otp'; }
 
 /** Establish the fully-authenticated session. Call ONLY after every required factor passed. */
-function ssms_establish_session(array $user, string $method, array $extra = []): void {
+function ssms_establish_session(array $user, string $method, array $extra = [], bool $mfaPassed = false): void {
     ssms_start_session();
-    $keepCsrf = false;
     session_regenerate_id(true);                            // fixation defence
     $_SESSION = [];
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
     $_SESSION['uid'] = (int)$user['id'];
     $_SESSION['sv'] = (int)($user['session_version'] ?? 1);  // bumped on role change / deactivate / reset
     $_SESSION['login_method'] = $method;                     // 'password' | 'qr'
-    $_SESSION['mfa_passed'] = ssms_mfa_enabled($user);
+    $_SESSION['mfa_passed'] = $mfaPassed;                    // true ONLY after an e-mail code was verified in this login
     $_SESSION['t0'] = time();
     $_SESSION['last'] = time();
     foreach ($extra as $k => $v) $_SESSION[$k] = $v;
-    $enrollRequired = ssms_mfa_enrollment_overdue($user);
-    if ($enrollRequired) $_SESSION['mfa_enroll_only'] = true;
     ssms_update('users', (int)$user['id'], ['last_login_at' => ssms_now(), 'failed_count' => 0]);
 }
 
@@ -210,8 +229,10 @@ function ssms_current_user(): ?array {
         ssms_destroy_session();                              // deactivated / role changed / reset
         return $cache = null;
     }
-    // MFA must have been satisfied if the account has it enabled.
-    if (ssms_mfa_enabled($u) && empty($_SESSION['mfa_passed'])) { ssms_destroy_session(); return $cache = null; }
+    // Re-evaluated from stored account data on EVERY request: a session without a completed e-mail code is
+    // useless for any account that requires one, and an account that is now blocked loses its session.
+    $gate = ssms_mfa_gate($u);
+    if ($gate === 'blocked' || ($gate === 'otp' && empty($_SESSION['mfa_passed']))) { ssms_destroy_session(); return $cache = null; }
     // QR sessions die immediately if the badge/device was revoked.
     if (($_SESSION['login_method'] ?? '') === 'qr') {
         $b = ssms_find('badges', (int)($_SESSION['badge_id'] ?? 0));
@@ -238,15 +259,13 @@ function ssms_destroy_session(): void {
 /**
  * Guard for protected HTML pages. $perm may be a permission or array (any-of).
  * - not logged in      -> login page
- * - must enroll in MFA -> mfa_setup only
  * - lacks permission   -> 403 page (deny by default)
  * - POST               -> CSRF verified automatically
  */
-function ssms_require(string|array|null $perm = null, bool $allowEnrollOnly = false): array {
+function ssms_require(string|array|null $perm = null): array {
     $u = ssms_current_user();
     $base = ssms_base();
     if (!$u) ssms_redirect($base . 'login.php');
-    if (!empty($_SESSION['mfa_enroll_only']) && !$allowEnrollOnly) ssms_redirect($base . 'mfa_setup.php');
     if ($_SERVER['REQUEST_METHOD'] === 'POST') ssms_csrf_check();
     if ($perm !== null && !ssms_can_any($u, (array)$perm)) {
         ssms_audit('authz.denied', null, 'denied', ['need' => implode('|', (array)$perm), 'path' => basename($_SERVER['SCRIPT_NAME'] ?? '')], $u);
@@ -266,7 +285,6 @@ function ssms_require_api(string|array $perm): array {
     header('Content-Type: application/json');
     $u = ssms_current_user();
     if (!$u) { http_response_code(401); echo json_encode(['success' => false, 'error' => 'Not signed in.']); exit; }
-    if (!empty($_SESSION['mfa_enroll_only'])) { http_response_code(403); echo json_encode(['success' => false, 'error' => 'MFA enrollment required.']); exit; }
     if (!ssms_can_any($u, (array)$perm)) {
         ssms_audit('authz.denied', null, 'denied', ['need' => implode('|', (array)$perm), 'path' => basename($_SERVER['SCRIPT_NAME'] ?? '')], $u);
         http_response_code(403); echo json_encode(['success' => false, 'error' => 'Forbidden.']); exit;

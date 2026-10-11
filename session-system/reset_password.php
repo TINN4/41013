@@ -28,17 +28,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($new !== (string)($_POST['confirm'] ?? '')) $error = 'Passwords do not match.';
         elseif ($pe = ssms_password_policy_error($new, $user['username'])) $error = $pe;
         else {
-            $ok = false;
-            ssms_mutate('users', function (array $rows) use ($user, $new, &$ok) {   // single-use: consume under lock
-                foreach ($rows as &$r) if ((int)$r['id'] === (int)$user['id'] && !empty($r['pwreset']['hash'])) {
-                    $r['password_hash'] = password_hash($new, PASSWORD_DEFAULT); $r['pwreset'] = null;
-                    $r['session_version'] = (int)$r['session_version'] + 1; $ok = true;
+            $ok = false; $emailVerified = false;
+            ssms_mutate('users', function (array $rows) use ($user, $new, &$ok, &$emailVerified) {   // single-use: consume under lock
+                foreach ($rows as $i => $r) if ((int)$r['id'] === (int)$user['id'] && !empty($r['pwreset']['hash'])) {
+                    $em = $r['pwreset']['email'] ?? null;      // address this link was e-mailed to: following it proves control of that inbox
+                    $rows[$i]['password_hash'] = password_hash($new, PASSWORD_DEFAULT); $rows[$i]['pwreset'] = null;
+                    $rows[$i]['session_version'] = (int)$r['session_version'] + 1; $ok = true;
+                    if ($em && strcasecmp($em, (string)($r['pending_email']['address'] ?? '')) === 0 && !ssms_email_taken($rows, $em, (int)$r['id'])) {
+                        $rows[$i]['email'] = $em; $rows[$i]['email_verified'] = true; $rows[$i]['email_verified_at'] = ssms_now(); $rows[$i]['pending_email'] = null; $emailVerified = true;
+                    }
                 }
                 return $rows;
             });
             if ($ok) {
                 unset($_SESSION['pw_token']);
-                ssms_audit('auth.password_reset_completed', $user['id'], 'ok', [], ['id' => $user['id'], 'role' => $user['role']]);
+                ssms_audit('auth.password_reset_completed', $user['id'], 'ok', ['email_verified_by_link' => $emailVerified], ['id' => $user['id'], 'role' => $user['role']]);
+                if ($emailVerified) ssms_audit('email.verified', $user['id'], 'ok', ['via' => 'password_link'], ['id' => $user['id'], 'role' => $user['role']]);
                 ssms_flash('ok', 'Password set. Please sign in.');
                 ssms_redirect('login.php');
             }
@@ -46,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-ssms_auth_start('Set password', $user ? 'Choose a password' : 'Link not valid', $user ? 'Minimum 12 characters.' : 'Ask the System Administrator for a new link.', 'fa-key');
+ssms_auth_start('Set password', $user ? 'Choose a password' : 'Link not valid', $user ? 'Minimum 12 characters.' : 'Ask the System Administrator to send a new link.', 'fa-key');
 if ($error): ?><div class="login-error" role="alert"><i class="fa-solid fa-circle-exclamation"></i> <?= ssms_e($error) ?></div><?php endif;
 if ($user): ?>
       <form method="POST" action="reset_password.php" autocomplete="off">

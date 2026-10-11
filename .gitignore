@@ -3,3 +3,7 @@ session-system/data/backups/
 session-system/data/audit.log
 session-system/data/.lock_*
 session-system/data/ratelimit.json
+session-system/data/otp_challenges.json
+session-system/vendor/composer/
+session-system/config/.env.*
+!session-system/config/.env.example

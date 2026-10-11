@@ -3,7 +3,7 @@
  * Append-only, hash-chained audit log (data/audit.log, one JSON object per line).
  * Each entry stores the SHA-256 of the previous entry, so deleting or editing any line
  * breaks the chain and is detected by ssms_audit_verify(). The application has no code path
- * that edits or deletes entries. Never pass passwords, OTPs, recovery codes or secrets in $ctx.
+ * that edits or deletes entries. Never pass passwords, OTPs or secrets in $ctx.
  */
 const SSMS_AUDIT_FORBIDDEN = ['password', 'pass', 'otp', 'code', 'secret', 'token', 'recovery', 'hash'];
 

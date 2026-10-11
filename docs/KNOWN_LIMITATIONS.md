@@ -18,3 +18,12 @@
 * Passwords: no breach-list check; policy is length-based. No "remember device" for MFA (by design).
 
 **Requires authorized confirmation (not invented)**: quorum threshold/basis, which members count (`eligible_for_quorum`), minutes approval authority, audit-log retention, session-start rules, MFA policy for ordinary accounts.
+
+## E-mail OTP limitations
+- Not tested against a real SMTP provider in this build (only a local SMTP sink); run `tools/test_mail.php` with real credentials.
+- Security equals the strength of the user's mailbox; verification proves inbox control, not identity.
+- Account creation/e-mail management stays with `users.manage` (System Administrator); the brief mentioned the Secretary creating accounts, but the existing permission model was preserved. Granting `users.manage` to the Secretary is a one-line RBAC change if the office wants it.
+- Flat-file storage: single-server only; `otp_challenges.json` is pruned after 24 h.
+- One mailbox per account (duplicates refused); shared mailboxes are not supported.
+- If `SSMS_APP_KEY` is lost, codes cannot be issued until a new key is configured (stored challenges are short-lived).
+- The static front-end prototype (`index.html`/`app.html`) has no authentication and was not changed.

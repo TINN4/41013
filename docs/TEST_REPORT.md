@@ -26,3 +26,10 @@ Full pass list: re-run `python3 tests/run_tests.py` (prints every check).
 
 ## Not tested (see KNOWN_LIMITATIONS.md)
 Browser rendering/console/responsive layout, QR camera scanning, geolocation prompts, JS behaviour of the polling code in a browser, Apache/Nginx deployment, email OTP/SMTP (not implemented), MySQL migration (not implemented), load testing, and an independent penetration test. Passing these tests is evidence the server-side rules work as designed, **not** a guarantee the system is free of vulnerabilities.
+
+
+## E-mail OTP release (executed, local SMTP sink)
+- `tests/run_tests.py`: 220/220 passed (legislative regression, RBAC matrix, OTP lifecycle, QR + code, e-mail change approval, audit chain).
+- `tests/test_email_otp.py`: 60/60 passed (SMTP outage, missing/invalid SMTP and missing key fail closed, send caps, concurrency, account creation and ownership, migration, recovery tools).
+- Baseline before changes (old TOTP suite, `TZ=UTC`): 141/141.
+- NOT executed: real SMTP provider delivery, browser/UI testing, load testing.

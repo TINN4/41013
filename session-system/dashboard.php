@@ -18,8 +18,10 @@ if (ssms_can($user, 'minutes.submit')) {
 $page_title = 'My Dashboard'; $page_sub = ssms_role_label($user['role']); $active_page = 'dashboard';
 include __DIR__ . '/includes/header.php';
 ?>
-<?php if (ssms_mfa_policy($user) === 'optional' && !ssms_mfa_enabled($user)): ?>
-  <div class="notice-box"><i class="fa-solid fa-shield-halved"></i> Two-step verification is optional for your role but recommended. <a href="mfa_setup.php">Turn it on</a>.</div>
+<?php if (!ssms_user_email_verified($user)): ?>
+  <div class="notice-box"><i class="fa-solid fa-envelope"></i> No verified e-mail address is on file for your account. <a href="my_security.php">Add and verify one</a><?= ssms_mfa_policy($user) === 'required' ? ' &mdash; it is required for your role' : ' to use e-mail sign-in codes' ?>.</div>
+<?php elseif (ssms_mfa_policy($user) === 'optional' && !ssms_mfa_enabled($user)): ?>
+  <div class="notice-box"><i class="fa-solid fa-shield-halved"></i> E-mail sign-in codes are optional for your role but recommended. <a href="my_security.php">Turn them on</a>.</div>
 <?php endif; ?>
 <div class="grid grid-3">
   <div class="card"><div class="card-head"><div><h3>Now in session</h3></div></div>

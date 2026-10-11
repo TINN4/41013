@@ -22,3 +22,9 @@
 Additive migration + new tables (see STORAGE_AND_MIGRATION.md). `data/qr_users.json` removed from the shipped tree (plaintext tokens).
 ## Browser prototype
 `app.html`: removed third-party `ninja-daytona-script.js`; pinned `lucide`. Nothing else touched.
+
+## E-mail OTP release
+- Replaced TOTP/QR-enrollment/recovery-codes with e-mail OTP (PHPMailer/SMTP). New: `includes/otp.php`, `mailer.php`, `useremail.php`, `my_security.php`, `verify_email.php`, `tools/migrate_email_otp.php`, `account_recovery.php`, `test_mail.php`. Removed: `includes/mfa.php`, `mfa_setup.php`, `tools/mfa_break_glass.php`, `tests/unit_totp.php`.
+- Mandatory roles are a hard-coded floor (config can only add). Mandatory accounts without a verified address are refused instead of entering an "enrollment-only" session.
+- User creation requires the holder's own address; invitation and password links are e-mailed, never shown to the administrator; e-mail changes for privileged accounts need two administrators.
+- Fixed: stale doc reference (`SETUP_AND_SECURITY.md`); tests now independent of `setup.php --dev` and of the shell time zone (run with `TZ=UTC`).

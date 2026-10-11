@@ -1,0 +1,12 @@
+{
+    "name": "ssms/session-system",
+    "description": "Session and Legislative Meeting Management System (SP San Jose del Monte)",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "ext-sodium": "*",
+        "ext-openssl": "*",
+        "ext-mbstring": "*",
+        "phpmailer/phpmailer": "^6.9"
+    }
+}
