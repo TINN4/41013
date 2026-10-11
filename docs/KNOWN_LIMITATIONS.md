@@ -22,7 +22,7 @@
 ## E-mail OTP limitations
 - Not tested against a real SMTP provider in this build (only a local SMTP sink); run `tools/test_mail.php` with real credentials.
 - Security equals the strength of the user's mailbox; verification proves inbox control, not identity.
-- Account creation/e-mail management stays with `users.manage` (System Administrator); the brief mentioned the Secretary creating accounts, but the existing permission model was preserved. Granting `users.manage` to the Secretary is a one-line RBAC change if the office wants it.
+- The Secretary (and System Administrator) can add Council Members with a `councilor` account via the Council Members page; all other roles and role/e-mail management of privileged accounts stay with the System Administrator (`users.manage`).
 - Flat-file storage: single-server only; `otp_challenges.json` is pruned after 24 h.
 - One mailbox per account (duplicates refused); shared mailboxes are not supported.
 - If `SSMS_APP_KEY` is lost, codes cannot be issued until a new key is configured (stored challenges are short-lived).

@@ -10,6 +10,10 @@ The SMTP account is only the *sender*. Each user's own verified address is the d
 **Test real delivery:** `php tools/test_mail.php you@yourdomain` (prints `SENT` only if the SMTP server accepted it; check the inbox to confirm).
 
 ## 3. Creating accounts
+**Council Members page (Secretary or System Administrator):** *Council Members → Add council member* creates the member record and a `councilor` account in one step (role is fixed server-side; that page cannot touch any other role). The e-mail must have a real domain (MX/A lookup, `SSMS_EMAIL_DNS_CHECK`) and, more importantly, is trusted only after the member opens the invitation sent to it: a made-up or mistyped mailbox never receives codes and never becomes verified. DNS can show a domain exists, not that a specific mailbox exists; only the confirmation link proves that.
+
+**User Accounts page (System Administrator):** for any role.
+
 Administrators (`users.manage` = System Administrator; the existing permission model was kept) use *User Accounts → Create account*: name, username, role, **the holder's own e-mail**. An invitation is e-mailed to that address; the holder sets the password through it, which also verifies the address. Until then the address is *pending* and mandatory-role accounts cannot sign in. If mail is down the account still exists; use *E-mail password link* later.
 Limit worth stating openly: verification proves control of an inbox, not that it belongs to the intended person. Entering the right address is the administrator's duty; creation and changes are audited.
 

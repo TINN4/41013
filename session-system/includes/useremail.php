@@ -16,6 +16,22 @@ function ssms_email_normalize(string $e): ?string {
     if ($e === '' || strlen($e) > 254 || preg_match('/[\s,;<>()"\\\\]/', $e)) return null;
     return filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;
 }
+/**
+ * Does the domain exist and accept mail (MX, or A as the fallback mail host)? Catches typos and made-up domains
+ * (e.g. gmial.com). It CANNOT prove that a specific mailbox exists: only the confirmation link does that.
+ * Disable with SSMS_EMAIL_DNS_CHECK=false if the server has no DNS access.
+ */
+function ssms_email_deliverable(string $email): bool {
+    if (strtolower((string)ssms_cfg('SSMS_EMAIL_DNS_CHECK', 'true')) === 'false') return true;
+    $d = substr(strrchr($email, '@') ?: '', 1);
+    if ($d === '' || !function_exists('checkdnsrr')) return false;
+    return checkdnsrr($d . '.', 'MX') || checkdnsrr($d . '.', 'A') || checkdnsrr($d . '.', 'AAAA');
+}
+/** Normalise AND check the domain accepts mail. Use at every entry point where a person types an address. */
+function ssms_email_for_entry(string $raw): ?string {
+    $e = ssms_email_normalize($raw);
+    return ($e !== null && ssms_email_deliverable($e)) ? $e : null;
+}
 function ssms_user_email_verified(array $u): bool {
     return !empty($u['email_verified']) && !empty($u['email']) && ssms_email_normalize((string)$u['email']) !== null;
 }
@@ -40,7 +56,7 @@ function ssms_mail_footer(): string {
  * $revokeCurrent drops the currently trusted address immediately (used when it is lost or compromised).
  */
 function ssms_email_begin_verification(int $uid, string $address, ?int $byId = null, bool $revokeCurrent = false, bool $deliver = true): string {
-    $address = ssms_email_normalize($address);
+    $address = ssms_email_for_entry($address);
     if ($address === null) return 'bad_address';
     $conflict = false; [$plain, $hash] = ssms_new_token();
     ssms_mutate('users', function (array $rows) use ($uid, $address, $byId, $revokeCurrent, $hash, &$conflict) {

@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $policy = ssms_mfa_policy($user);
 
     if ($action === 'change_email') {
-        $new = ssms_email_normalize((string)($_POST['new_email'] ?? ''));
+        $new = ssms_email_for_entry((string)($_POST['new_email'] ?? ''));
         if ($e = ssms_self_reauth($user, (string)($_POST['password'] ?? ''))) $err[] = $e;
         elseif ($new === null) $err[] = 'Enter a valid e-mail address.';
         elseif (ssms_rl_blocked('emailchg:u:' . $uid) > 0) $err[] = 'Too many e-mail changes. Try again later.';

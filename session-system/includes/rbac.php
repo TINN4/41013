@@ -16,10 +16,11 @@ const SSMS_ROLES = [
 
 const SSMS_PERMISSIONS = [
     'sysadmin' => [
-        'users.manage', 'devices.manage', 'audit.view', 'settings.manage', 'mfa.reset.request', 'mfa.reset.approve',
+        'users.manage', 'members.manage', 'devices.manage', 'audit.view', 'settings.manage', 'mfa.reset.request', 'mfa.reset.approve',
         'schedule.view',
     ],
     'secretary' => [
+        'members.manage',
         'schedule.view', 'schedule.manage', 'schedule.cancel',
         'agenda.view', 'agenda.edit', 'agenda.finalize', 'agenda.revise',
         'attendance.view_all', 'attendance.record', 'attendance.correct', 'quorum.view',
@@ -63,6 +64,7 @@ function ssms_can_any(?array $user, array $perms): bool {
 /** Sidebar / dashboard module catalogue; visible when the user has ANY listed permission. */
 function ssms_modules(): array {
     return [
+        'members'     => ['icon' => 'fa-solid fa-users',           'label' => 'Council Members',           'file' => 'modules/members.php',     'perm' => ['members.manage']],
         'scheduling'  => ['icon' => 'fa-solid fa-calendar-check',  'label' => 'Session Scheduling',        'file' => 'modules/scheduling.php',  'perm' => ['schedule.view']],
         'agenda'      => ['icon' => 'fa-solid fa-list-check',      'label' => 'Agenda Preparation',        'file' => 'modules/agenda.php',      'perm' => ['agenda.view', 'agenda.view_final']],
         'attendance'  => ['icon' => 'fa-solid fa-user-check',      'label' => 'Attendance & Quorum',       'file' => 'modules/attendance.php',  'perm' => ['attendance.view_all', 'attendance.view_own', 'quorum.view']],

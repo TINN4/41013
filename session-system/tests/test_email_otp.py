@@ -156,6 +156,40 @@ def scenario_creation_and_ownership():
         check("S36 account deactivated between password and code: login cannot complete", "dashboard.php" not in r.url)
     finally: srv.stop(); srv.cleanup()
 
+
+def scenario_members():
+    srv = H.Server(tag="members", extra_env={"SSMS_EMAIL_DNS_CHECK": "true"})
+    try:
+        sec = login("secretary_dev"); sec.get("modules/members.php")
+        add = lambda n, u, e, extra=None, c=None: (c or sec).post("modules/members.php", dict({"action": "add", "name": n, "username": u, "email": e, "position": "City Councilor", "committee": "Health", "eligible_for_quorum": "1", "confirm_password": PW}, **(extra or {})))
+        nm = len(read("members")); nu = len(read("users"))
+        r = add("Hon. Fake Domain", "fake01", "someone@nonexistent-domain-xyz123.invalid")
+        check("S54 e-mail whose domain does not exist is rejected (nothing created)", "valid e-mail" in r.text and len(read("members")) == nm and len(read("users")) == nu, r.text[:200])
+        srv.proc.terminate(); srv.proc.wait()
+        env = dict(srv.env, SSMS_EMAIL_DNS_CHECK="false")
+        srv.proc = subprocess.Popen(["php", "-S", f"127.0.0.1:{H.PORT}", "router.php"], cwd=H.ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
+        sec = login("secretary_dev"); sec.get("modules/members.php"); add = lambda n, u, e, extra=None, c=None: (c or sec).post("modules/members.php", dict({"action": "add", "name": n, "username": u, "email": e, "position": "City Councilor", "committee": "Health", "eligible_for_quorum": "1", "confirm_password": PW}, **(extra or {})))
+        n_sec = H.SINK.count(email_of("secretary_dev"))
+        r = add("Hon. Maria Lopez", "mlopez", "m.lopez@dev.invalid", {"role": "sysadmin"})
+        users = read("users"); u = [x for x in users if x["username"] == "mlopez"][0]; mem = [x for x in read("members") if x["name"] == "Hon. Maria Lopez"]
+        check("S55 Secretary adds a member + account in one step; role is FIXED to councilor even if a role is posted", u["role"] == "councilor" and u["member_id"] == mem[0]["id"] and u["password_hash"] is None)
+        check("S56 e-mail is pending/unverified and the invitation went only to the member's own inbox", u["email"] is None and u["pending_email"]["address"] == "m.lopez@dev.invalid" and H.SINK.last("m.lopez@dev.invalid") is not None and H.SINK.count(email_of("secretary_dev")) == n_sec)
+        d1 = add("Hon. B", "bbb", "M.LOPEZ@dev.invalid").text; d2 = add("Hon. C", "mlopez", "c@dev.invalid").text; d3 = add("Hon. Maria Lopez", "ddd", "d@dev.invalid").text
+        check("S57 duplicate e-mail / username / name refused, nothing half-created", "already belongs" in d1 and "already exists" in d2 and "already exists" in d3 and len(read("members")) == nm + 1, re.findall(r'alert[^>]*>.*?</i>\s*([^<]+)', d1 + d3, re.S))
+        check("S58 wrong password -> nothing created", "password was not correct" in add("Hon. E", "eee", "e@dev.invalid", {"confirm_password": "no"}).text and len(read("members")) == nm + 1)
+        link = H.link_from(H.SINK.last("m.lopez@dev.invalid"), "reset_password.php"); mc = C(); mc.get(link.replace(BASE + "/", "")); mc.post("reset_password.php", {"new": "Member-Own-Passphrase-42", "confirm": "Member-Own-Passphrase-42"})
+        u = [x for x in read("users") if x["username"] == "mlopez"][0]
+        check("S59 the member's own link verifies the e-mail; councilor can then sign in password-only (optional policy)", u["email_verified"] and u["email"] == "m.lopez@dev.invalid")
+        coun = login("councilor_dev"); viewer = login("viewer_dev")
+        check("S60 councilors/viewers cannot open or use the Council Members page (403)", coun.get("modules/members.php").status_code == 403 and add("X", "xxx", "x@dev.invalid", c=viewer).status_code == 403)
+        adm = login("admin_dev"); pr = [x for x in read("users") if x["username"] == "presiding_dev"][0]
+        r = sec.post("modules/members.php", {"action": "change_email", "user_id": pr["id"], "new_email": "evil@dev.invalid", "confirm_password": PW})
+        check("S61 this page cannot touch privileged accounts (presiding/secretary/admin)", "Unknown member account" in r.text and [x for x in read("users") if x["username"] == "presiding_dev"][0]["pending_email"] is None)
+        r = sec.post("admin_users.php", {"action": "change_role", "id": u["id"], "role": "sysadmin", "confirm_password": PW})
+        check("S62 Secretary still cannot manage user accounts/roles (403)", r.status_code == 403)
+        r = sec.post("modules/members.php", {"action": "resend", "user_id": u["id"], "confirm_password": PW}); check("S63 resend invitation works for a member account", H.SINK.count("m.lopez@dev.invalid") >= 2)
+    finally: srv.stop(); srv.cleanup()
+
 def scenario_tools():
     srv = H.Server(tag="tools")
     try:
@@ -200,7 +234,7 @@ if __name__ == "__main__":
     H.SINK = H.Sink(H.SMTP_PORT)
     err = None
     try:
-        for f in (scenario_outage, scenario_misconfig, scenario_rate_and_concurrency, scenario_creation_and_ownership, scenario_tools):
+        for f in (scenario_outage, scenario_misconfig, scenario_rate_and_concurrency, scenario_creation_and_ownership, scenario_members, scenario_tools):
             try: f()
             except BaseException as e:
                 import traceback; traceback.print_exc(); err = e

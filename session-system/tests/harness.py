@@ -166,7 +166,7 @@ class Server:
         write("otp_challenges", [])
         key = base64.b64encode(os.urandom(32)).decode()
         env = {"SSMS_APP_KEY": key, "SSMS_ENV": "development", "SSMS_APP_URL": BASE, "SSMS_OTP_RESEND_COOLDOWN_SEC": "5",
-               "SSMS_OTP_SENDS_PER_15MIN": "200", "SSMS_GEOFENCE_ENABLED": "true"}
+               "SSMS_OTP_SENDS_PER_15MIN": "200", "SSMS_EMAIL_DNS_CHECK": "false", "SSMS_GEOFENCE_ENABLED": "true"}
         if with_mail:
             env.update({"SSMS_SMTP_HOST": "127.0.0.1", "SSMS_SMTP_PORT": str(smtp_port or SMTP_PORT), "SSMS_SMTP_ENCRYPTION": "none", "SSMS_MAIL_FROM": "ssms@test.invalid"})
         env.update(extra_env or {})

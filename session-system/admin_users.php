@@ -25,12 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = strtolower(ssms_text((string)($_POST['username'] ?? ''), 40));
         $name = ssms_text((string)($_POST['name'] ?? ''), 100);
         $role = (string)($_POST['role'] ?? '');
-        $email = ssms_email_normalize((string)($_POST['email'] ?? ''));
+        $email = ssms_email_for_entry((string)($_POST['email'] ?? ''));
         $member = (int)($_POST['member_id'] ?? 0) ?: null;
         if (!preg_match('/^[a-z0-9_.-]{3,40}$/', $username)) $back('bad', 'Username must be 3-40 characters: letters, digits, dot, dash, underscore.');
         if ($name === '') $back('bad', 'Full name is required.');
         if (!ssms_valid_role($role)) $back('bad', 'Choose a valid role.');
-        if ($email === null) $back('bad', 'Enter the account holder\'s own, valid e-mail address.');
+        if ($email === null) $back('bad', 'Enter the account holder\'s own, valid e-mail address (its domain must exist and accept mail).');
         if ($member && !ssms_find('members', $member)) $back('bad', 'Unknown council member.');
         [$id, $dup] = ssms_insert_unique('users', [
             'username' => $username, 'name' => $name, 'role' => $role, 'member_id' => $member, 'password_hash' => null, 'active' => true,
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mailBack($st, (string)($target['pending_email']['address'] ?? ''));
     }
     elseif ($a === 'set_email') {
-        $email = ssms_email_normalize((string)($_POST['new_email'] ?? ''));
+        $email = ssms_email_for_entry((string)($_POST['new_email'] ?? ''));
         $reason = ssms_text((string)($_POST['reason'] ?? ''), 300);
         $revoke = !empty($_POST['revoke_current']);
         if ($email === null) $back('bad', 'Enter a valid e-mail address.');
