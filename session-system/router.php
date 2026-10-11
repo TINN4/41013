@@ -6,7 +6,7 @@
  */
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = rawurldecode($path);
-if (preg_match('#(^|/)(data|config|includes|tools|tests|backups|vendor)(/|$)|(^|/)\.#', $path)) {
+if ((preg_match('#(^|/)(data|config|includes|tools|tests|backups|vendor)(/|$)|(^|/)\.#', $path) && !preg_match('#(^|/)assets/vendor/#', $path))) {
     http_response_code(404); echo 'Not found'; return true;
 }
 if ($path === '/' ) { header('Location: login.php'); return true; }

@@ -1,6 +1,6 @@
 # Apache: never serve private folders or data/secret files, never list directories.
 Options -Indexes
-RedirectMatch 404 ^/?(.*/)?(data|config|includes|tools|tests|vendor)(/|$)
+RedirectMatch 404 ^/?(?!.*assets/vendor/)(.*/)?(data|config|includes|tools|tests|vendor)(/|$)
 <FilesMatch "\.(json|log|env|md|bak|sql|example)$">
   Require all denied
 </FilesMatch>

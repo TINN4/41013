@@ -58,16 +58,37 @@ include __DIR__ . '/includes/header.php';
   <p class="mono" style="font-size:12px;" id="issued-token" data-token="<?= ssms_e($issued['token']) ?>">Token: <?= ssms_e($issued['token']) ?></p>
   <button class="btn btn-ghost btn-sm" type="button" id="issued-save"><i class="fa-solid fa-download"></i> Save image</button>
 </div>
-<script src="assets/vendor/qrcode.js"></script>
+<script src="assets/vendor/qrcode.js?v=2"></script>
 <script>
 (function () {
+  var box = document.getElementById('issued-qr');
   var t = document.getElementById('issued-token').getAttribute('data-token');
-  var q = qrcode(0, 'M'); q.addData(t); q.make();
-  document.getElementById('issued-qr').innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
-  document.getElementById('issued-save').addEventListener('click', function () {
-    var svg = document.querySelector('#issued-qr svg').outerHTML;
-    var a = document.createElement('a'); a.download = 'badge.svg';
-    a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })); a.click();
+  var saveBtn = document.getElementById('issued-save');
+  try {
+    if (typeof qrcode !== 'function') throw new Error('QR library not loaded');
+    var q = qrcode(0, 'M'); q.addData(t); q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+  } catch (err) {
+    box.innerHTML = '<p style="color:#b42318;font-size:13px;">The QR image could not be drawn (' + err.message + '). Reload this page with Ctrl+F5 and issue the badge again.</p>';
+    saveBtn.disabled = true;
+  }
+  function download(href, name) {
+    var a = document.createElement('a'); a.download = name; a.href = href;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+  saveBtn.addEventListener('click', function () {
+    var el = box.querySelector('svg');
+    if (!el) return;
+    var svg = el.outerHTML.replace('<svg ', '<svg width="600" height="600" ');
+    var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    var img = new Image();
+    img.onload = function () {            // PNG is the most compatible format for chat apps and phones
+      var c = document.createElement('canvas'); c.width = 600; c.height = 600;
+      var x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, 600, 600); x.drawImage(img, 0, 0, 600, 600);
+      download(c.toDataURL('image/png'), 'badge.png');
+    };
+    img.onerror = function () { download(uri, 'badge.svg'); };
+    img.src = uri;
   });
 })();
 </script>

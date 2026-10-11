@@ -110,11 +110,52 @@ ssms_session_picker($sessions, $selectedId);
       <div class="form-group"><label for="pa">Agenda item (optional)</label><select id="pa" name="agenda_id"><option value="">&mdash; none &mdash;</option><?php foreach ($agenda as $a): ?><option value="<?= (int)$a['id'] ?>" <?= (int)($editEntry['agenda_id'] ?? 0) === (int)$a['id'] ? 'selected' : '' ?>><?= ssms_e($a['order'] . '. ' . mb_substr($a['item'], 0, 60)) ?></option><?php endforeach; ?></select></div>
       <div class="form-group"><label for="ps">Speaker (optional)</label><input id="ps" name="speaker" maxlength="120" value="<?= ssms_e($editEntry['speaker'] ?? '') ?>"></div>
     </div>
-    <div class="form-group"><label for="pn">What just happened?</label><textarea id="pn" name="note" maxlength="4000" placeholder="e.g. Motion to approve the ordinance was seconded and carried." required><?= ssms_e($editEntry['note'] ?? '') ?></textarea></div>
+    <div class="form-group"><label for="pn">What just happened?</label><textarea id="pn" name="note" maxlength="4000" placeholder="e.g. Motion to approve the ordinance was seconded and carried." required><?= ssms_e($editEntry['note'] ?? '') ?></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost btn-sm" id="dictate-btn"><i class="fa-solid fa-microphone"></i> <span>Dictate</span></button>
+        <label for="dictate-lang" style="position:absolute;left:-999px;">Dictation language</label>
+        <select id="dictate-lang" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;"><option value="en-PH">English (Philippines)</option><option value="fil-PH">Filipino</option><option value="en-US">English (US)</option></select>
+        <span id="dictate-status" style="font-size:12px;color:var(--ink-600);"></span>
+      </div>
+      <p style="font-size:11px;color:var(--ink-600);margin-top:4px;">Dictation uses your browser&rsquo;s speech service (Chrome or Edge, over HTTPS, microphone allowed). Always check the text before saving.</p></div>
     <button type="submit" class="btn btn-navy"><i class="fa-solid fa-<?= $editEntry ? 'floppy-disk' : 'plus' ?>"></i> <?= $editEntry ? 'Save changes' : 'Add Entry' ?></button>
     <?php if ($editEntry): ?><a class="btn btn-ghost" href="proceedings.php?session_id=<?= $selectedId ?>">Cancel</a><?php endif; ?>
   </form>
 </div>
+
+<script>
+(function () {
+  var btn = document.getElementById('dictate-btn'), ta = document.getElementById('pn');
+  if (!btn || !ta) return;
+  var st = document.getElementById('dictate-status'), lang = document.getElementById('dictate-lang');
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { btn.disabled = true; st.textContent = 'Speech-to-text is not supported in this browser. Use Chrome or Edge.'; return; }
+  var rec = null, on = false;
+  function label(txt) { btn.querySelector('span').textContent = txt; }
+  btn.addEventListener('click', function () {
+    if (on) { rec.stop(); return; }
+    rec = new SR(); rec.lang = lang.value; rec.continuous = true; rec.interimResults = true;
+    var base = ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '', finals = '';
+    rec.onresult = function (e) {
+      var interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var r = e.results[i];
+        if (r.isFinal) finals += r[0].transcript + ' '; else interim += r[0].transcript;
+      }
+      ta.value = (base + finals + interim).slice(0, 4000);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    rec.onerror = function (e) {
+      st.textContent = (e.error === 'not-allowed' || e.error === 'service-not-allowed')
+        ? 'Microphone blocked. Allow it for this site (padlock icon in the address bar).'
+        : (e.error === 'no-speech' ? 'No speech heard.' : 'Speech error: ' + e.error);
+    };
+    rec.onend = function () { on = false; label('Dictate'); btn.classList.remove('btn-navy'); if (!/blocked|error/.test(st.textContent)) st.textContent = 'Stopped.'; };
+    try { rec.start(); on = true; label('Stop'); btn.classList.add('btn-navy'); st.textContent = 'Listening...'; }
+    catch (err) { st.textContent = 'Could not start: ' + err.message; }
+  });
+})();
+</script>
 <?php elseif (ssms_can($user, 'proceedings.draft')): ?>
   <div class="notice-box">Entries can be added only while the session is ongoing or completed, and not after its minutes are approved.</div>
 <?php endif; ?>
