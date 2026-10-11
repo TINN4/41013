@@ -99,8 +99,12 @@ ssms_auth_start('Verify', 'Check your e-mail', 'Enter the 6-digit sign-in code s
       <form method="POST" action="mfa.php" style="margin-top:12px;">
         <?= ssms_csrf_field() ?>
         <input type="hidden" name="action" value="resend">
-        <button type="submit" class="back-link" style="background:none;border:0;cursor:pointer;" <?= $waitResend > 0 ? 'disabled' : '' ?>><i class="fa-solid fa-paper-plane"></i> Send a new code<?= $waitResend > 0 ? ' (available in ' . $waitResend . 's)' : '' ?></button>
+        <button type="submit" id="resendBtn" class="back-link" style="background:none;border:0;cursor:pointer;" <?= $waitResend > 0 ? 'disabled' : '' ?>><i class="fa-solid fa-paper-plane"></i> <span id="resendTxt">Send a new code<?= $waitResend > 0 ? ' (available in ' . $waitResend . 's)' : '' ?></span></button>
       </form>
+      <script>
+      (function(){var left=<?= (int)$waitResend ?>,b=document.getElementById('resendBtn'),t=document.getElementById('resendTxt');
+        if(left<=0)return;var i=setInterval(function(){left--;if(left<=0){clearInterval(i);b.disabled=false;t.textContent='Send a new code';}else{t.textContent='Send a new code (available in '+left+'s)';}},1000);})();
+      </script>
       <p style="margin-top:10px;font-size:12.5px;">The code expires in <?= (int)(ssms_otp_ttl() / 60) ?> minutes and works once. A new code cancels the previous one. Do not share it with anyone.</p>
       <form method="POST" action="logout.php"><?= ssms_csrf_field() ?><button type="submit" class="back-link" style="background:none;border:0;cursor:pointer;"><i class="fa-solid fa-arrow-left"></i> Cancel and return to login</button></form>
 <?php ssms_auth_end();
