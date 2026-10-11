@@ -11,6 +11,7 @@ define('SSMS_DATA_DIR', getenv('SSMS_DATA_DIR') ?: SSMS_ROOT . '/data');
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/store.php';
+require_once __DIR__ . '/session_db.php';
 require_once __DIR__ . '/rbac.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/domain.php';
@@ -66,6 +67,7 @@ function ssms_start_session(): void {
     ]);
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
+    if (ssms_db_enabled()) session_set_save_handler(new SsmsDbSessionHandler(), true);
     session_start();
 }
 

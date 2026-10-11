@@ -1,6 +1,6 @@
 <?php
 /**
- * Append-only, hash-chained audit log (data/audit.log, one JSON object per line).
+ * Append-only, hash-chained audit log (database table ssms_audit, or data/audit.log in file mode; one JSON object per line).
  * Each entry stores the SHA-256 of the previous entry, so deleting or editing any line
  * breaks the chain and is detected by ssms_audit_verify(). The application has no code path
  * that edits or deletes entries. Never pass passwords, OTPs or secrets in $ctx.
@@ -26,6 +26,7 @@ function ssms_audit(string $action, $target = null, string $result = 'ok', array
             $u = @ssms_find('users', (int)$_SESSION['uid']);
             if ($u) $actor['role'] = $u['role'];
         }
+        if (ssms_db_enabled()) { ssms_audit_append_db($action, $target, $result, $ctx, $actor); return; }
         $file = SSMS_DATA_DIR . '/audit.log';
         $fh = fopen($file, 'c+');
         if (!$fh) return;
@@ -60,6 +61,20 @@ function ssms_audit(string $action, $target = null, string $result = 'ok', array
 }
 
 function ssms_audit_read(int $limit = 200, ?string $filterAction = null): array {
+    if (ssms_db_enabled()) {
+        $pdo = ssms_pdo('audit'); $rows = [];
+        if ($filterAction === null) {
+            $st = $pdo->prepare('SELECT line FROM ssms_audit ORDER BY id DESC LIMIT ' . max(1, (int)$limit));
+            $st->execute();
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $line) { $j = json_decode($line, true); if (is_array($j)) $rows[] = $j; }
+            return $rows;
+        }
+        foreach ($pdo->query('SELECT line FROM ssms_audit ORDER BY id')->fetchAll(PDO::FETCH_COLUMN) as $line) {
+            $j = json_decode($line, true);
+            if (is_array($j) && strpos($j['action'], $filterAction) === 0) $rows[] = $j;
+        }
+        return array_slice(array_reverse($rows), 0, $limit);
+    }
     $file = SSMS_DATA_DIR . '/audit.log';
     if (!is_file($file)) return [];
     $rows = [];
@@ -72,6 +87,15 @@ function ssms_audit_read(int $limit = 200, ?string $filterAction = null): array 
 
 /** Returns [bool intact, ?int firstBrokenId]. */
 function ssms_audit_verify(): array {
+    if (ssms_db_enabled()) {
+        $prev = str_repeat('0', 64);
+        foreach (ssms_pdo('audit')->query('SELECT line FROM ssms_audit ORDER BY id')->fetchAll(PDO::FETCH_COLUMN) as $line) {
+            $j = json_decode($line, true);
+            if (!is_array($j) || ($j['prev'] ?? '') !== $prev) return [false, $j['id'] ?? null];
+            $prev = hash('sha256', $line);
+        }
+        return [true, null];
+    }
     $file = SSMS_DATA_DIR . '/audit.log';
     if (!is_file($file)) return [true, null];
     $prev = str_repeat('0', 64);
@@ -81,4 +105,22 @@ function ssms_audit_verify(): array {
         $prev = hash('sha256', $line);
     }
     return [true, null];
+}
+
+/** Database variant of the append: a named lock serialises writers so the hash chain stays linear. */
+function ssms_audit_append_db(string $action, $target, string $result, array $ctx, ?array $actor): void {
+    $pdo = ssms_pdo('audit');
+    if ((int)$pdo->query("SELECT GET_LOCK('ssms_audit_chain', 5)")->fetchColumn() !== 1) throw new RuntimeException('audit lock timeout');
+    try {
+        $prev = str_repeat('0', 64); $lastId = 0;
+        $last = $pdo->query('SELECT line FROM ssms_audit ORDER BY id DESC LIMIT 1')->fetchColumn();
+        if ($last !== false) { $prev = hash('sha256', (string)$last); $j = json_decode((string)$last, true); $lastId = (int)($j['id'] ?? 0); }
+        $entry = [
+            'id' => $lastId + 1, 'ts' => date('c'),
+            'actor_id' => $actor['id'] ?? null, 'actor_role' => $actor['role'] ?? null,
+            'action' => $action, 'target' => $target === null ? null : (string)$target,
+            'result' => $result, 'ip' => ssms_ip(), 'ctx' => ssms_audit_clean($ctx), 'prev' => $prev,
+        ];
+        $pdo->prepare('INSERT INTO ssms_audit (line) VALUES (?)')->execute([json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)]);
+    } finally { $pdo->query("SELECT RELEASE_LOCK('ssms_audit_chain')")->fetchColumn(); }
 }

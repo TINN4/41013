@@ -28,6 +28,8 @@ if (ssms_cfg('SSMS_ENV') === 'production' && $dev) { fwrite(STDERR, "REFUSED: --
 file_put_contents(SSMS_DATA_DIR . '/.htaccess', "Require all denied\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n");
 file_put_contents(SSMS_DATA_DIR . '/index.html', '');
 
+echo 'storage: ' . ssms_storage_label() . "\n";
+
 // 2. backup before any structural change
 $bk = ssms_backup_data('pre-migration');
 echo "backup written: " . str_replace($root . '/', '', $bk) . "\n";
@@ -62,9 +64,9 @@ ssms_mutate('proceedings', function ($rows) use (&$changed) {
     return $rows;
 });
 foreach (['users', 'otp_challenges', 'badges', 'attendance_history', 'proceedings_history', 'agenda_revisions', 'minutes_versions'] as $t) {
-    if (!is_file(ssms_path($t))) ssms_store_raw($t, []);
+    if (!ssms_table_exists($t)) ssms_store_raw($t, []);
 }
-if (!is_file(ssms_path('settings'))) {
+if (!ssms_table_exists('settings')) {
     ssms_store_raw('settings', [
         'quorum_rule' => ['basis' => 'eligible_members', 'type' => 'majority', 'numerator' => 1, 'denominator' => 2, 'fixed' => null,
                           'confirmed_by_office' => false, 'confirmed_by' => null, 'note' => 'DEFAULT majority-of-members rule. Must be confirmed by the authorized office against the applicable rules of procedure.'],
@@ -76,7 +78,7 @@ echo "migrated legacy records (fields added: $changed)\n";
 
 // 4. legacy plaintext QR tokens: NEVER carried over. They were world-readable under data/.
 $legacyQr = SSMS_DATA_DIR . '/qr_users.json';
-if (is_file($legacyQr)) {
+if (!ssms_db_enabled() && is_file($legacyQr)) {
     rename($legacyQr, $bk . '/qr_users.json.legacy');         // kept only in the (protected) backup
     echo "legacy qr_users.json (plaintext tokens) moved into the backup; old badges are invalid - re-issue from Admin > QR Badges\n";
 }

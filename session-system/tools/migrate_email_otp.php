@@ -49,7 +49,7 @@ if (!$plan) { echo "Nothing to do.\n"; exit(0); }
 
 $bk = ssms_backup_data('pre-email-otp-migration');
 echo "Backup written: " . basename($bk) . "\n";
-if (!is_file(ssms_path('otp_challenges'))) ssms_store_raw('otp_challenges', []);
+if (!ssms_table_exists('otp_challenges')) ssms_store_raw('otp_challenges', []);
 ssms_mutate('users', function ($rows) {
     foreach ($rows as &$r) {
         $old = $r['mfa'] ?? [];
